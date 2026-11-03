@@ -1,0 +1,19 @@
+name: CodeQL
+
+on:
+  pull_request:
+    branches: [main, develop]
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write      # subir hallazgos a la pestaña Security
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript-typescript
+          queries: security-extended
+      - uses: github/codeql-action/analyze@v3
