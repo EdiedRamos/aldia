@@ -1,5 +1,8 @@
 import Image from "next/image";
 
+import { Button } from "@/components/ui/button";
+import { logout } from "@/lib/actions/auth";
+
 export default function Home() {
   return (
     <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
@@ -62,6 +65,15 @@ export default function Home() {
           >
             Documentation
           </a>
+          <form action={logout}>
+            <Button
+              type="submit"
+              variant="outline"
+              className="h-12 w-full rounded-full px-5 md:w-[158px]"
+            >
+              Cerrar sesión
+            </Button>
+          </form>
         </div>
       </main>
     </div>
