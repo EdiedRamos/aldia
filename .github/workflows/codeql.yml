@@ -7,7 +7,7 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     permissions:
-      security-events: write      # subir hallazgos a la pestaña Security
+      security-events: write # subir hallazgos a la pestaña Security
       contents: read
       actions: read
     steps:
