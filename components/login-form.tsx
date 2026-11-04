@@ -1,38 +1,34 @@
-"use client"
+'use client'
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
-import { cn } from "cn"
-import { signInWithPopup, signOut } from "firebase/auth"
-import { GalleryVerticalEndIcon } from "lucide-react"
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { cn } from 'cn'
+import { signInWithPopup, signOut } from 'firebase/auth'
+import { GalleryVerticalEndIcon } from 'lucide-react'
 
-import { Button } from "@/components/ui/button"
-import {
-  Field,
-  FieldError,
-  FieldGroup,
-} from "@/components/ui/field"
-import { auth, googleProvider } from "@/lib/firebase"
+import { Button } from '@/components/ui/button'
+import { Field, FieldError, FieldGroup } from '@/components/ui/field'
+import { auth, googleProvider } from '@/lib/firebase'
 
 function getAuthErrorMessage(error: unknown) {
   const code = (error as { code?: string })?.code
   switch (code) {
-    case "auth/popup-closed-by-user":
-    case "auth/cancelled-popup-request":
-      return "Cancelaste el inicio de sesión."
-    case "auth/popup-blocked":
-      return "El navegador bloqueó la ventana emergente. Permite las ventanas emergentes e inténtalo de nuevo."
-    case "auth/network-request-failed":
-      return "Error de conexión. Revisa tu internet e inténtalo de nuevo."
+    case 'auth/popup-closed-by-user':
+    case 'auth/cancelled-popup-request':
+      return 'Cancelaste el inicio de sesión.'
+    case 'auth/popup-blocked':
+      return 'El navegador bloqueó la ventana emergente. Permite las ventanas emergentes e inténtalo de nuevo.'
+    case 'auth/network-request-failed':
+      return 'Error de conexión. Revisa tu internet e inténtalo de nuevo.'
     default:
-      return "No se pudo iniciar sesión. Inténtalo de nuevo."
+      return 'No se pudo iniciar sesión. Inténtalo de nuevo.'
   }
 }
 
 export function LoginForm({
   className,
   ...props
-}: React.ComponentProps<"div">) {
+}: React.ComponentProps<'div'>) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -45,27 +41,27 @@ export function LoginForm({
       const result = await signInWithPopup(auth, googleProvider)
       const idToken = await result.user.getIdToken()
 
-      const response = await fetch("/api/auth/session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const response = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idToken }),
       })
 
       if (!response.ok) {
         const data = await response.json().catch(() => null)
-        console.error("[/api/auth/session]", response.status, data)
+        console.error('[/api/auth/session]', response.status, data)
         await signOut(auth)
         setError(
           response.status === 403
-            ? "Tu correo no está autorizado. Contacta al administrador."
+            ? 'Tu correo no está autorizado. Contacta al administrador.'
             : response.status === 500
-              ? "El servidor no está configurado correctamente."
-              : "No se pudo iniciar sesión. Inténtalo de nuevo."
+              ? 'El servidor no está configurado correctamente.'
+              : 'No se pudo iniciar sesión. Inténtalo de nuevo.'
         )
         return
       }
 
-      router.push("/")
+      router.push('/')
       router.refresh()
     } catch (err) {
       setError(getAuthErrorMessage(err))
@@ -75,13 +71,10 @@ export function LoginForm({
   }
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
+    <div className={cn('flex flex-col gap-6', className)} {...props}>
       <FieldGroup>
         <div className="flex flex-col items-center gap-2 text-center">
-          <a
-            href="#"
-            className="flex flex-col items-center gap-2 font-medium"
-          >
+          <a href="#" className="flex flex-col items-center gap-2 font-medium">
             <div className="flex size-8 items-center justify-center rounded-md">
               <GalleryVerticalEndIcon className="size-6" />
             </div>
@@ -102,7 +95,7 @@ export function LoginForm({
                 fill="currentColor"
               />
             </svg>
-            {isLoading ? "Conectando..." : "Continuar con Google"}
+            {isLoading ? 'Conectando...' : 'Continuar con Google'}
           </Button>
           {error && <FieldError>{error}</FieldError>}
         </Field>
