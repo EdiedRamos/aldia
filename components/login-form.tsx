@@ -9,6 +9,7 @@ import { GalleryVerticalEndIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Field, FieldError, FieldGroup } from '@/components/ui/field'
 import { auth, googleProvider } from '@/lib/firebase'
+import { syncUserWithFirestore } from '@/lib/user-sync'
 
 function getAuthErrorMessage(error: unknown) {
   const code = (error as { code?: string })?.code
@@ -39,6 +40,18 @@ export function LoginForm({
 
     try {
       const result = await signInWithPopup(auth, googleProvider)
+
+      const sync = await syncUserWithFirestore(result.user)
+
+      if (!sync.success) {
+        setError(
+          sync.reason === 'UNAUTHORIZED_EMAIL'
+            ? 'Tu correo no está autorizado. Contacta al administrador.'
+            : 'No se pudo sincronizar tu cuenta. Inténtalo de nuevo.'
+        )
+        return
+      }
+
       const idToken = await result.user.getIdToken()
 
       const response = await fetch('/api/auth/session', {
