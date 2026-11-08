@@ -45,7 +45,6 @@ export async function POST(request: Request) {
 
   try {
     const decoded = await getAdminAuth().verifyIdToken(idToken, true)
-    console.log({ decoded })
     const email = decoded.email?.trim().toLowerCase()
 
     if (!email) {
@@ -57,7 +56,7 @@ export async function POST(request: Request) {
 
     const allowed = await getAdminDb().doc(`allowedEmails/${email}`).get()
 
-    if (!allowed.exists) {
+    if (!allowed.exists || allowed.data()?.active !== true) {
       await logLogin({
         uid: decoded.uid,
         email,

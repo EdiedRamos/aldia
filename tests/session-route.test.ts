@@ -112,9 +112,31 @@ describe('POST /api/auth/session', () => {
     })
   })
 
+  it('returns 403 and logs a denied attempt when the allowlist entry is inactive', async () => {
+    mocks.verifyIdToken.mockResolvedValue({ uid: 'u1', email: 'a@b.com' })
+    mocks.getDoc.mockResolvedValue({
+      exists: true,
+      data: () => ({ email: 'a@b.com', active: false }),
+    })
+
+    const response = await POST(request({ idToken: 'token' }))
+
+    expect(response.status).toBe(403)
+    expect(mocks.recordLoginLog).toHaveBeenCalledWith({
+      uid: 'u1',
+      email: 'a@b.com',
+      result: 'denied',
+      ip: undefined,
+      userAgent: undefined,
+    })
+  })
+
   it('returns 200, sets the session cookie and logs the access', async () => {
     mocks.verifyIdToken.mockResolvedValue({ uid: 'u1', email: 'a@b.com' })
-    mocks.getDoc.mockResolvedValue({ exists: true })
+    mocks.getDoc.mockResolvedValue({
+      exists: true,
+      data: () => ({ active: true }),
+    })
 
     const response = await POST(
       request(
@@ -141,7 +163,10 @@ describe('POST /api/auth/session', () => {
 
   it('does not fail the login when the log write fails', async () => {
     mocks.verifyIdToken.mockResolvedValue({ uid: 'u1', email: 'a@b.com' })
-    mocks.getDoc.mockResolvedValue({ exists: true })
+    mocks.getDoc.mockResolvedValue({
+      exists: true,
+      data: () => ({ active: true }),
+    })
     mocks.recordLoginLog.mockRejectedValue(new Error('firestore down'))
 
     const response = await POST(request({ idToken: 'token' }))
