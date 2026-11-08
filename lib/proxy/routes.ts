@@ -1,7 +1,7 @@
-const GUEST_ONLY_ROUTES = ["/login"]
-const PUBLIC_ROUTES = ["/login", "/privacy", "/terms"]
+const GUEST_ONLY_ROUTES = ['/login']
+const PUBLIC_ROUTES = ['/login', '/privacy', '/terms']
 
-export type RoutePolicy = "guest-only" | "public" | "protected"
+export type RoutePolicy = 'guest-only' | 'public' | 'protected'
 
 function matchesRoute(pathname: string, route: string) {
   return pathname === route || pathname.startsWith(`${route}/`)
@@ -9,12 +9,12 @@ function matchesRoute(pathname: string, route: string) {
 
 export function classify(pathname: string): RoutePolicy {
   if (GUEST_ONLY_ROUTES.some((route) => matchesRoute(pathname, route))) {
-    return "guest-only"
+    return 'guest-only'
   }
 
   if (PUBLIC_ROUTES.some((route) => matchesRoute(pathname, route))) {
-    return "public"
+    return 'public'
   }
 
-  return "protected"
+  return 'protected'
 }
