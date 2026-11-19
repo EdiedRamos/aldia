@@ -20,6 +20,10 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import type { ReceiptType } from '@/features/services/domain/service.entity'
+import {
+  parseSafeDownloadUrl,
+  triggerSafeFileDownload,
+} from '@/lib/utils/safe-download'
 
 export interface ReceiptPreviewModalProps {
   open: boolean
@@ -31,37 +35,6 @@ export interface ReceiptPreviewModalProps {
   fileName?: string
   isLoading?: boolean
   errorMessage?: string | null
-}
-
-/**
- * Parses and validates that a preview URL uses an allowed safe protocol (`blob:` or `https:`).
- */
-function parseSafePreviewUrl(rawUrl: string | null): URL | null {
-  if (!rawUrl) {
-    return null
-  }
-
-  try {
-    const parsedUrl = new URL(rawUrl)
-
-    if (parsedUrl.protocol === 'blob:') {
-      if (
-        typeof window !== 'undefined' &&
-        parsedUrl.origin !== window.location.origin
-      ) {
-        return null
-      }
-      return parsedUrl
-    }
-
-    if (parsedUrl.protocol === 'https:') {
-      return parsedUrl
-    }
-
-    return null
-  } catch {
-    return null
-  }
 }
 
 /**
@@ -102,7 +75,7 @@ export function ReceiptPreviewModal({
   errorMessage = null,
 }: ReceiptPreviewModalProps) {
   const [isDownloading, setIsDownloading] = useState(false)
-  const safeParsedUrl = parseSafePreviewUrl(previewUrl)
+  const safeParsedUrl = parseSafeDownloadUrl(previewUrl)
   const safeUrlString = safeParsedUrl ? safeParsedUrl.toString() : null
   const isPdf = isPdfReceipt(fileType, safeUrlString, fileName)
 
@@ -111,28 +84,13 @@ export function ReceiptPreviewModal({
       return
     }
 
-    let parsedUrl: URL
-    try {
-      parsedUrl = new URL(previewUrl)
-    } catch {
+    const parsedUrl = parseSafeDownloadUrl(previewUrl)
+    if (!parsedUrl) {
       return
     }
 
     if (parsedUrl.protocol === 'blob:') {
-      if (parsedUrl.origin !== window.location.origin) {
-        return
-      }
-      const anchor = document.createElement('a')
-      anchor.href = parsedUrl.toString()
-      anchor.download = fileName
-      anchor.rel = 'noopener noreferrer'
-      document.body.appendChild(anchor)
-      anchor.click()
-      anchor.remove()
-      return
-    }
-
-    if (parsedUrl.protocol !== 'https:') {
+      triggerSafeFileDownload(parsedUrl.toString(), fileName)
       return
     }
 
@@ -147,15 +105,11 @@ export function ReceiptPreviewModal({
       const blob = await response.blob()
       const blobUrl = URL.createObjectURL(blob)
 
-      const anchor = document.createElement('a')
-      anchor.href = blobUrl
-      anchor.download = fileName
-      anchor.rel = 'noopener noreferrer'
-      document.body.appendChild(anchor)
-      anchor.click()
-      anchor.remove()
-
-      URL.revokeObjectURL(blobUrl)
+      try {
+        triggerSafeFileDownload(blobUrl, fileName)
+      } finally {
+        URL.revokeObjectURL(blobUrl)
+      }
     } catch {
       window.open(validatedHttpsUrl, '_blank', 'noopener,noreferrer')
     } finally {
