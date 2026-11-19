@@ -3,24 +3,17 @@
 import { revalidatePath } from 'next/cache'
 import { ZodError } from 'zod'
 
-import { archiveServiceUseCase } from '@/features/services/application/archive-service.use-case'
-import { createServiceUseCase } from '@/features/services/application/create-service.use-case'
-import { getReceiptPreviewUseCase } from '@/features/services/application/get-receipt-preview.use-case'
-import { registerPaymentUseCase } from '@/features/services/application/register-payment.use-case'
-import { updateServiceUseCase } from '@/features/services/application/update-service.use-case'
+import { ReceiptPolicyError } from '@/features/services/domain/receipt.policy'
 import type {
   CreateServiceInput,
   UpdateServiceInput,
 } from '@/features/services/domain/service.schemas'
-import { firebaseReceiptStorage } from '@/features/services/infrastructure/firebase-receipt.storage'
-import { firestoreServiceRepository } from '@/features/services/infrastructure/firestore-service.repository'
+import { servicesContainer } from '@/features/services/infrastructure/services.container'
 import { getCurrentUser } from '@/lib/auth'
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
 export type ReceiptPreviewActionResult =
   { ok: true; url: string } | { ok: false; error: string }
-
-const MAX_RECEIPT_SIZE_BYTES = 5 * 1024 * 1024
 
 async function requireAuthenticatedUser() {
   const user = await getCurrentUser()
@@ -33,6 +26,9 @@ async function requireAuthenticatedUser() {
 function formatActionError(error: unknown, fallbackMessage: string): string {
   if (error instanceof ZodError) {
     return error.issues[0]?.message ?? fallbackMessage
+  }
+  if (error instanceof ReceiptPolicyError) {
+    return error.userMessage
   }
   if (error instanceof Error && error.message === 'Unauthorized user session') {
     return 'Debes iniciar sesión para realizar esta acción.'
@@ -81,28 +77,6 @@ function parseServicePayload(
   return payload
 }
 
-function resolveExtension(fileName: string, contentType: string): string {
-  if (contentType === 'application/pdf') {
-    return 'pdf'
-  }
-  if (contentType === 'image/jpeg') {
-    return 'jpg'
-  }
-  if (contentType === 'image/png') {
-    return 'png'
-  }
-  if (contentType === 'image/webp') {
-    return 'webp'
-  }
-
-  const parts = fileName.split('.')
-  if (parts.length > 1) {
-    return parts[parts.length - 1].toLowerCase()
-  }
-
-  return 'jpg'
-}
-
 export async function createServiceAction(
   formData: FormData | CreateServiceInput
 ): Promise<ActionResult> {
@@ -110,9 +84,7 @@ export async function createServiceAction(
     const user = await requireAuthenticatedUser()
     const payload = parseServicePayload(formData) as CreateServiceInput
 
-    await createServiceUseCase(user.uid, payload, {
-      serviceRepository: firestoreServiceRepository,
-    })
+    await servicesContainer.createService(user.uid, payload)
 
     revalidatePath('/servicios')
     return { ok: true }
@@ -133,9 +105,7 @@ export async function updateServiceAction(
     const user = await requireAuthenticatedUser()
     const payload = parseServicePayload(formData) as UpdateServiceInput
 
-    await updateServiceUseCase(serviceId, user.uid, payload, {
-      serviceRepository: firestoreServiceRepository,
-    })
+    await servicesContainer.updateService(serviceId, user.uid, payload)
 
     revalidatePath('/servicios')
     return { ok: true }
@@ -154,9 +124,7 @@ export async function archiveServiceAction(
   try {
     const user = await requireAuthenticatedUser()
 
-    await archiveServiceUseCase(serviceId, user.uid, {
-      serviceRepository: firestoreServiceRepository,
-    })
+    await servicesContainer.archiveService(serviceId, user.uid)
 
     revalidatePath('/servicios')
     return { ok: true }
@@ -181,50 +149,25 @@ export async function registerPaymentAction(
     const monthsCovered = Number(monthsCoveredRaw)
     const fileEntry = formData.get('file')
 
-    if (!(fileEntry instanceof File) || fileEntry.size === 0) {
+    if (!(fileEntry instanceof File)) {
       return {
         ok: false,
         error: 'Debes adjuntar una imagen o PDF del comprobante.',
       }
     }
 
-    if (fileEntry.size > MAX_RECEIPT_SIZE_BYTES) {
-      return {
-        ok: false,
-        error: 'El archivo no puede superar los 5 MB.',
-      }
-    }
-
-    const contentType = fileEntry.type
-    const isAllowedMime =
-      contentType.startsWith('image/') || contentType === 'application/pdf'
-
-    if (!isAllowedMime) {
-      return {
-        ok: false,
-        error: 'Solo se permiten imágenes o archivos PDF.',
-      }
-    }
-
     const arrayBuffer = await fileEntry.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
-    const extension = resolveExtension(fileEntry.name, contentType)
 
-    await registerPaymentUseCase(
-      {
-        userId: user.uid,
-        serviceId,
-        startPeriod,
-        monthsCovered,
-        buffer,
-        contentType,
-        extension,
-      },
-      {
-        serviceRepository: firestoreServiceRepository,
-        receiptStorage: firebaseReceiptStorage,
-      }
-    )
+    await servicesContainer.registerPayment({
+      userId: user.uid,
+      serviceId,
+      startPeriod,
+      monthsCovered,
+      buffer,
+      contentType: fileEntry.type,
+      fileName: fileEntry.name,
+    })
 
     revalidatePath('/servicios')
     return { ok: true }
@@ -243,15 +186,10 @@ export async function getReceiptPreviewAction(
   try {
     const user = await requireAuthenticatedUser()
 
-    const url = await getReceiptPreviewUseCase(
-      {
-        userId: user.uid,
-        receiptPath,
-      },
-      {
-        receiptStorage: firebaseReceiptStorage,
-      }
-    )
+    const url = await servicesContainer.getReceiptPreview({
+      userId: user.uid,
+      receiptPath,
+    })
 
     return { ok: true, url }
   } catch (error) {

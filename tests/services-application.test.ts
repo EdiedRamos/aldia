@@ -6,6 +6,10 @@ import { getReceiptPreviewUseCase } from '@/features/services/application/get-re
 import { getServicesBoardUseCase } from '@/features/services/application/get-services-board.use-case'
 import { registerPaymentUseCase } from '@/features/services/application/register-payment.use-case'
 import { updateServiceUseCase } from '@/features/services/application/update-service.use-case'
+import {
+  MAX_RECEIPT_SIZE_BYTES,
+  ReceiptPolicyError,
+} from '@/features/services/domain/receipt.policy'
 import type {
   Service,
   ServicePayment,
@@ -256,5 +260,42 @@ describe('features/services/application use cases', () => {
     )
 
     expect(receiptStorage.getReceiptReadUrl).not.toHaveBeenCalled()
+  })
+
+  it('registerPaymentUseCase enforces receipt file policy before calling storage or repository', async () => {
+    const serviceRepository = createMockRepository()
+    const receiptStorage = createMockReceiptStorage()
+
+    await expect(
+      registerPaymentUseCase(
+        {
+          userId: 'u1',
+          serviceId: 's1',
+          startPeriod: '2026-11',
+          monthsCovered: 1,
+          buffer: Buffer.alloc(MAX_RECEIPT_SIZE_BYTES + 1),
+          contentType: 'image/jpeg',
+        },
+        { serviceRepository, receiptStorage }
+      )
+    ).rejects.toBeInstanceOf(ReceiptPolicyError)
+
+    await expect(
+      registerPaymentUseCase(
+        {
+          userId: 'u1',
+          serviceId: 's1',
+          startPeriod: '2026-11',
+          monthsCovered: 1,
+          buffer: Buffer.from('not-an-image'),
+          contentType: 'text/plain',
+        },
+        { serviceRepository, receiptStorage }
+      )
+    ).rejects.toBeInstanceOf(ReceiptPolicyError)
+
+    expect(serviceRepository.findById).not.toHaveBeenCalled()
+    expect(receiptStorage.uploadReceipt).not.toHaveBeenCalled()
+    expect(serviceRepository.savePayments).not.toHaveBeenCalled()
   })
 })

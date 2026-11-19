@@ -1,8 +1,6 @@
 import { generatePeriodRange } from '@/core/domain/period'
-import type {
-  ReceiptType,
-  ServicePayment,
-} from '@/features/services/domain/service.entity'
+import { validateReceiptFile } from '@/features/services/domain/receipt.policy'
+import type { ServicePayment } from '@/features/services/domain/service.entity'
 import type {
   IReceiptStorage,
   IServiceRepository,
@@ -16,19 +14,13 @@ export interface RegisterPaymentUseCaseInput {
   monthsCovered: number
   buffer: Buffer
   contentType: string
-  extension: string
+  fileName?: string
+  extension?: string
 }
 
 export interface RegisterPaymentDependencies {
   serviceRepository: IServiceRepository
   receiptStorage: IReceiptStorage
-}
-
-function resolveReceiptType(contentType: string): ReceiptType {
-  if (contentType === 'application/pdf') {
-    return 'PDF'
-  }
-  return 'IMAGE'
 }
 
 export async function registerPaymentUseCase(
@@ -44,6 +36,13 @@ export async function registerPaymentUseCase(
   if (!validated.startPeriod) {
     throw new Error('Start period is required to register a payment')
   }
+
+  const validatedFile = validateReceiptFile({
+    sizeBytes: input.buffer.byteLength,
+    contentType: input.contentType,
+    fileName: input.fileName,
+    extension: input.extension,
+  })
 
   const service = await serviceRepository.findById(
     validated.serviceId,
@@ -63,11 +62,10 @@ export async function registerPaymentUseCase(
     serviceId: validated.serviceId,
     period: validated.startPeriod,
     buffer: input.buffer,
-    contentType: input.contentType,
-    extension: input.extension,
+    contentType: validatedFile.contentType,
+    extension: validatedFile.extension,
   })
 
-  const receiptType = resolveReceiptType(input.contentType)
   const paidAt = new Date().toISOString()
 
   const payments: ServicePayment[] = periods.map((period) => ({
@@ -77,7 +75,7 @@ export async function registerPaymentUseCase(
     period,
     paidAt,
     receiptUrl,
-    receiptType,
+    receiptType: validatedFile.receiptType,
     receiptPath,
   }))
 
