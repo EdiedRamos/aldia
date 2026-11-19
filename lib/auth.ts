@@ -1,29 +1,13 @@
 import 'server-only'
 
-import { cookies } from 'next/headers'
+import { getCurrentUserUseCase } from '@/features/auth/application/get-current-user.use-case'
+import type { SessionUser } from '@/features/auth/domain/auth.entity'
+import { cookieSessionManager } from '@/features/auth/infrastructure/cookie-session.manager'
 
-import { decryptSession, SESSION_COOKIE_NAME } from '@/lib/session'
-
-export type CurrentUser = {
-  uid: string
-  name: string
-  email: string
-  avatar: string
-}
+export type CurrentUser = SessionUser
 
 export async function getCurrentUser(): Promise<CurrentUser | null> {
-  const cookieStore = await cookies()
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value
-  const session = await decryptSession(token)
-
-  if (!session) {
-    return null
-  }
-
-  return {
-    uid: session.uid,
-    name: session.name,
-    email: session.email,
-    avatar: session.picture ?? '',
-  }
+  return getCurrentUserUseCase({
+    sessionManager: cookieSessionManager,
+  })
 }

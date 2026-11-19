@@ -2,18 +2,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   verifyIdToken: vi.fn(),
-  getDoc: vi.fn(),
-  recordLoginLog: vi.fn(),
+  findAllowedEmail: vi.fn(),
+  upsertUserProfile: vi.fn(),
+  recordAudit: vi.fn(),
 }))
 
-vi.mock('@/lib/firebase-admin', () => ({
-  getAdminAuth: () => ({ verifyIdToken: mocks.verifyIdToken }),
-  getAdminDb: () => ({ doc: () => ({ get: mocks.getDoc }) }),
+vi.mock('@/features/auth/infrastructure/firebase-token-verifier', () => ({
+  firebaseTokenVerifier: {
+    verifyIdToken: mocks.verifyIdToken,
+  },
 }))
 
-vi.mock('@/lib/login-log', () => ({
-  recordLoginLog: mocks.recordLoginLog,
+vi.mock('@/features/auth/infrastructure/firestore-auth.repository', () => ({
+  firestoreAuthRepository: {
+    findAllowedEmail: mocks.findAllowedEmail,
+    upsertUserProfile: mocks.upsertUserProfile,
+  },
 }))
+
+vi.mock(
+  '@/features/auth/infrastructure/firestore-login-audit.repository',
+  () => ({
+    firestoreLoginAuditRepository: {
+      record: mocks.recordAudit,
+    },
+  })
+)
 
 import { POST } from '@/app/api/auth/session/route'
 import { SESSION_COOKIE_NAME } from '@/lib/session'
@@ -34,6 +48,8 @@ describe('POST /api/auth/session', () => {
     vi.resetAllMocks()
     process.env.FIREBASE_CLIENT_EMAIL = 'test@example.com'
     process.env.FIREBASE_PRIVATE_KEY = 'test-private-key'
+    mocks.upsertUserProfile.mockResolvedValue(undefined)
+    mocks.recordAudit.mockResolvedValue(undefined)
   })
 
   afterEach(() => {
@@ -74,7 +90,7 @@ describe('POST /api/auth/session', () => {
 
     expect(response.status).toBe(401)
     expect(body.code).toBe('auth/id-token-expired')
-    expect(mocks.verifyIdToken).toHaveBeenCalledWith('token', true)
+    expect(mocks.verifyIdToken).toHaveBeenCalledWith('token')
   })
 
   it('returns 400 when the account has no email', async () => {
@@ -85,12 +101,12 @@ describe('POST /api/auth/session', () => {
     expect(response.status).toBe(400)
   })
 
-  it('returns 403 and logs a denied attempt when the email is not allowed', async () => {
+  it('returns 403 and logs a DENIED attempt when the email is not allowed', async () => {
     mocks.verifyIdToken.mockResolvedValue({
       uid: 'u1',
       email: ' NoAuth@Example.com ',
     })
-    mocks.getDoc.mockResolvedValue({ exists: false })
+    mocks.findAllowedEmail.mockResolvedValue(null)
 
     const response = await POST(
       request(
@@ -103,39 +119,48 @@ describe('POST /api/auth/session', () => {
     )
 
     expect(response.status).toBe(403)
-    expect(mocks.recordLoginLog).toHaveBeenCalledWith({
+    expect(mocks.upsertUserProfile).not.toHaveBeenCalled()
+    expect(mocks.recordAudit).toHaveBeenCalledWith({
       uid: 'u1',
       email: 'noauth@example.com',
-      result: 'denied',
+      result: 'DENIED',
       ip: '203.0.113.5',
       userAgent: 'test-agent',
+      retentionDays: 90,
     })
   })
 
-  it('returns 403 and logs a denied attempt when the allowlist entry is inactive', async () => {
+  it('returns 403 and logs a DENIED attempt when the allowlist entry is inactive', async () => {
     mocks.verifyIdToken.mockResolvedValue({ uid: 'u1', email: 'a@b.com' })
-    mocks.getDoc.mockResolvedValue({
-      exists: true,
-      data: () => ({ email: 'a@b.com', active: false }),
+    mocks.findAllowedEmail.mockResolvedValue({
+      email: 'a@b.com',
+      active: false,
     })
 
     const response = await POST(request({ idToken: 'token' }))
 
     expect(response.status).toBe(403)
-    expect(mocks.recordLoginLog).toHaveBeenCalledWith({
+    expect(mocks.upsertUserProfile).not.toHaveBeenCalled()
+    expect(mocks.recordAudit).toHaveBeenCalledWith({
       uid: 'u1',
       email: 'a@b.com',
-      result: 'denied',
+      result: 'DENIED',
       ip: undefined,
       userAgent: undefined,
+      retentionDays: 90,
     })
   })
 
-  it('returns 200, sets the session cookie and logs the access', async () => {
-    mocks.verifyIdToken.mockResolvedValue({ uid: 'u1', email: 'a@b.com' })
-    mocks.getDoc.mockResolvedValue({
-      exists: true,
-      data: () => ({ active: true }),
+  it('returns 200, syncs profile, sets the session cookie, and logs SUCCESS', async () => {
+    mocks.verifyIdToken.mockResolvedValue({
+      uid: 'u1',
+      email: 'a@b.com',
+      name: 'Ana',
+      picture: 'https://example.com/a.png',
+    })
+    mocks.findAllowedEmail.mockResolvedValue({
+      email: 'a@b.com',
+      active: true,
     })
 
     const response = await POST(
@@ -152,22 +177,29 @@ describe('POST /api/auth/session', () => {
     expect(response.status).toBe(200)
     expect(body).toEqual({ ok: true })
     expect(response.cookies.get(SESSION_COOKIE_NAME)?.value).toBeTruthy()
-    expect(mocks.recordLoginLog).toHaveBeenCalledWith({
+    expect(mocks.upsertUserProfile).toHaveBeenCalledWith({
       uid: 'u1',
       email: 'a@b.com',
-      result: 'ok',
+      displayName: 'Ana',
+      photoURL: 'https://example.com/a.png',
+    })
+    expect(mocks.recordAudit).toHaveBeenCalledWith({
+      uid: 'u1',
+      email: 'a@b.com',
+      result: 'SUCCESS',
       ip: '203.0.113.5',
       userAgent: 'test-agent',
+      retentionDays: 90,
     })
   })
 
-  it('does not fail the login when the log write fails', async () => {
+  it('does not fail the login when the audit log write fails', async () => {
     mocks.verifyIdToken.mockResolvedValue({ uid: 'u1', email: 'a@b.com' })
-    mocks.getDoc.mockResolvedValue({
-      exists: true,
-      data: () => ({ active: true }),
+    mocks.findAllowedEmail.mockResolvedValue({
+      email: 'a@b.com',
+      active: true,
     })
-    mocks.recordLoginLog.mockRejectedValue(new Error('firestore down'))
+    mocks.recordAudit.mockRejectedValue(new Error('firestore down'))
 
     const response = await POST(request({ idToken: 'token' }))
 

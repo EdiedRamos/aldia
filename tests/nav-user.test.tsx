@@ -4,13 +4,11 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 const mocks = vi.hoisted(() => ({
-  replace: vi.fn(),
-  refresh: vi.fn(),
-  fetch: vi.fn(),
+  logoutAction: vi.fn(),
 }))
 
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: mocks.replace, refresh: mocks.refresh }),
+vi.mock('@/features/auth/presentation/actions/auth.actions', () => ({
+  logoutAction: mocks.logoutAction,
 }))
 
 import { NavUser } from '@/components/nav-user'
@@ -33,7 +31,7 @@ function renderNavUser() {
 async function openLogoutDialog() {
   const u = userEvent.setup()
   await u.click(screen.getByRole('button', { name: /ana maría pérez/i }))
-  await u.click(await screen.findByRole('menuitem', { name: /log out/i }))
+  await u.click(await screen.findByRole('menuitem', { name: /cerrar sesión/i }))
   return u
 }
 
@@ -44,8 +42,7 @@ afterEach(() => {
 describe('NavUser logout confirmation', () => {
   beforeEach(() => {
     vi.resetAllMocks()
-    mocks.fetch.mockResolvedValue({ ok: true })
-    vi.stubGlobal('fetch', mocks.fetch)
+    mocks.logoutAction.mockResolvedValue(undefined)
   })
 
   it('asks for confirmation before logging out', async () => {
@@ -53,10 +50,9 @@ describe('NavUser logout confirmation', () => {
 
     const u = await openLogoutDialog()
 
-    expect(await screen.findByRole('alertdialog')).toBeTruthy()
+    expect(await screen.findByRole('dialog')).toBeTruthy()
     expect(screen.getByText('¿Cerrar sesión?')).toBeTruthy()
-    expect(mocks.fetch).not.toHaveBeenCalled()
-    expect(mocks.replace).not.toHaveBeenCalled()
+    expect(mocks.logoutAction).not.toHaveBeenCalled()
 
     await u.click(screen.getByRole('button', { name: /cancelar/i }))
   })
@@ -67,24 +63,16 @@ describe('NavUser logout confirmation', () => {
     const u = await openLogoutDialog()
     await u.click(screen.getByRole('button', { name: /cancelar/i }))
 
-    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(mocks.fetch).not.toHaveBeenCalled()
-    expect(mocks.replace).not.toHaveBeenCalled()
-    expect(mocks.refresh).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(mocks.logoutAction).not.toHaveBeenCalled()
   })
 
-  it('logs out and redirects to /login when the user confirms', async () => {
+  it('invokes logoutAction when the user confirms', async () => {
     renderNavUser()
 
     const u = await openLogoutDialog()
     await u.click(screen.getByRole('button', { name: /^cerrar sesión$/i }))
 
-    await waitFor(() =>
-      expect(mocks.fetch).toHaveBeenCalledWith('/api/auth/logout', {
-        method: 'POST',
-      })
-    )
-    expect(mocks.replace).toHaveBeenCalledWith('/login')
-    expect(mocks.refresh).toHaveBeenCalled()
+    await waitFor(() => expect(mocks.logoutAction).toHaveBeenCalledTimes(1))
   })
 })
