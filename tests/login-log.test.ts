@@ -1,11 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   add: vi.fn(),
   collection: vi.fn(),
 }))
 
-vi.mock("@/lib/firebase-admin", () => ({
+vi.mock('@/lib/firebase-admin', () => ({
   getAdminDb: () => ({
     collection: (name: string) => {
       mocks.collection(name)
@@ -14,39 +14,39 @@ vi.mock("@/lib/firebase-admin", () => ({
   }),
 }))
 
-import { recordLoginLog } from "@/lib/login-log"
+import { recordLoginLog } from '@/lib/login-log'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-describe("recordLoginLog", () => {
+describe('recordLoginLog', () => {
   beforeEach(() => {
     vi.resetAllMocks()
   })
 
-  it("writes a log entry to the loginLogs collection", async () => {
+  it('writes a log entry to the loginLogs collection', async () => {
     const before = Date.now()
 
     await recordLoginLog({
-      uid: "u1",
-      email: "a@b.com",
-      result: "ok",
-      ip: "203.0.113.5",
-      userAgent: "test-agent",
+      uid: 'u1',
+      email: 'a@b.com',
+      result: 'ok',
+      ip: '203.0.113.5',
+      userAgent: 'test-agent',
     })
 
     const after = Date.now()
 
-    expect(mocks.collection).toHaveBeenCalledWith("loginLogs")
+    expect(mocks.collection).toHaveBeenCalledWith('loginLogs')
     expect(mocks.add).toHaveBeenCalledTimes(1)
 
     const document = mocks.add.mock.calls[0][0]
 
     expect(document).toMatchObject({
-      uid: "u1",
-      email: "a@b.com",
-      result: "ok",
-      ip: "203.0.113.5",
-      userAgent: "test-agent",
+      uid: 'u1',
+      email: 'a@b.com',
+      result: 'ok',
+      ip: '203.0.113.5',
+      userAgent: 'test-agent',
     })
     expect(document.createdAt).toBeDefined()
 
@@ -56,8 +56,8 @@ describe("recordLoginLog", () => {
     expect(expireAt).toBeLessThanOrEqual(after + 90 * DAY_MS)
   })
 
-  it("stores null when ip and user agent are absent", async () => {
-    await recordLoginLog({ uid: "u1", email: "a@b.com", result: "denied" })
+  it('stores null when ip and user agent are absent', async () => {
+    await recordLoginLog({ uid: 'u1', email: 'a@b.com', result: 'denied' })
 
     const document = mocks.add.mock.calls[0][0]
 

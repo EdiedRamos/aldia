@@ -1,14 +1,14 @@
-import "server-only"
-import { FieldValue, Timestamp } from "firebase-admin/firestore"
+import 'server-only'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 
-import { getAdminDb } from "@/lib/firebase-admin"
+import { getAdminDb } from '@/lib/firebase-admin'
 
 const LOG_RETENTION_DAYS = 90
 
 export type LoginLogInput = {
   uid: string
   email: string
-  result: "ok" | "denied"
+  result: 'ok' | 'denied'
   ip?: string
   userAgent?: string
 }
@@ -25,7 +25,7 @@ export async function recordLoginLog({
   )
 
   await getAdminDb()
-    .collection("loginLogs")
+    .collection('loginLogs')
     .add({
       uid,
       email,

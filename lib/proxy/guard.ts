@@ -1,7 +1,7 @@
-import { NextResponse, type NextRequest } from "next/server"
+import { NextResponse, type NextRequest } from 'next/server'
 
-import { classify } from "@/lib/proxy/routes"
-import { decryptSession, SESSION_COOKIE_NAME } from "@/lib/session"
+import { classify } from '@/lib/proxy/routes'
+import { decryptSession, SESSION_COOKIE_NAME } from '@/lib/session'
 
 export async function guard(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -12,14 +12,14 @@ export async function guard(request: NextRequest) {
 
   let response: NextResponse
 
-  if (policy === "guest-only") {
+  if (policy === 'guest-only') {
     response = session
-      ? NextResponse.redirect(new URL("/", request.url))
+      ? NextResponse.redirect(new URL('/', request.url))
       : NextResponse.next()
-  } else if (policy === "public" || session) {
+  } else if (policy === 'public' || session) {
     response = NextResponse.next()
   } else {
-    response = NextResponse.redirect(new URL("/login", request.url))
+    response = NextResponse.redirect(new URL('/login', request.url))
   }
 
   if (staleSession) {
