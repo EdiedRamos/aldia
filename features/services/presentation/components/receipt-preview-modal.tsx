@@ -34,6 +34,37 @@ export interface ReceiptPreviewModalProps {
 }
 
 /**
+ * Parses and validates that a preview URL uses an allowed safe protocol (`blob:` or `https:`).
+ */
+function parseSafePreviewUrl(rawUrl: string | null): URL | null {
+  if (!rawUrl) {
+    return null
+  }
+
+  try {
+    const parsedUrl = new URL(rawUrl)
+
+    if (parsedUrl.protocol === 'blob:') {
+      if (
+        typeof window !== 'undefined' &&
+        parsedUrl.origin !== window.location.origin
+      ) {
+        return null
+      }
+      return parsedUrl
+    }
+
+    if (parsedUrl.protocol === 'https:') {
+      return parsedUrl
+    }
+
+    return null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Resolves whether the given receipt file type or path corresponds to a PDF document.
  */
 function isPdfReceipt(
@@ -71,26 +102,45 @@ export function ReceiptPreviewModal({
   errorMessage = null,
 }: ReceiptPreviewModalProps) {
   const [isDownloading, setIsDownloading] = useState(false)
-  const isPdf = isPdfReceipt(fileType, previewUrl, fileName)
+  const safeParsedUrl = parseSafePreviewUrl(previewUrl)
+  const safeUrlString = safeParsedUrl ? safeParsedUrl.toString() : null
+  const isPdf = isPdfReceipt(fileType, safeUrlString, fileName)
 
   async function handleDownload() {
     if (!previewUrl) {
       return
     }
 
-    if (previewUrl.startsWith('blob:')) {
+    let parsedUrl: URL
+    try {
+      parsedUrl = new URL(previewUrl)
+    } catch {
+      return
+    }
+
+    if (parsedUrl.protocol === 'blob:') {
+      if (parsedUrl.origin !== window.location.origin) {
+        return
+      }
       const anchor = document.createElement('a')
-      anchor.href = previewUrl
+      anchor.href = parsedUrl.toString()
       anchor.download = fileName
+      anchor.rel = 'noopener noreferrer'
       document.body.appendChild(anchor)
       anchor.click()
       anchor.remove()
       return
     }
 
+    if (parsedUrl.protocol !== 'https:') {
+      return
+    }
+
+    const validatedHttpsUrl = parsedUrl.toString()
+
     setIsDownloading(true)
     try {
-      const response = await fetch(previewUrl)
+      const response = await fetch(validatedHttpsUrl)
       if (!response.ok) {
         throw new Error('Failed to fetch receipt blob')
       }
@@ -100,13 +150,14 @@ export function ReceiptPreviewModal({
       const anchor = document.createElement('a')
       anchor.href = blobUrl
       anchor.download = fileName
+      anchor.rel = 'noopener noreferrer'
       document.body.appendChild(anchor)
       anchor.click()
       anchor.remove()
 
       URL.revokeObjectURL(blobUrl)
     } catch {
-      window.open(previewUrl, '_blank', 'noopener,noreferrer')
+      window.open(validatedHttpsUrl, '_blank', 'noopener,noreferrer')
     } finally {
       setIsDownloading(false)
     }
@@ -150,17 +201,17 @@ export function ReceiptPreviewModal({
                 Intenta cerrar y volver a abrir el comprobante.
               </p>
             </div>
-          ) : previewUrl ? (
+          ) : safeUrlString ? (
             isPdf ? (
               <iframe
-                src={previewUrl}
+                src={safeUrlString}
                 title={title}
                 className="h-[68vh] w-full rounded-lg border-0 bg-background"
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={previewUrl}
+                src={safeUrlString}
                 alt={title}
                 className="max-h-[68vh] w-auto max-w-full rounded-lg object-contain"
               />
@@ -181,7 +232,7 @@ export function ReceiptPreviewModal({
             Cerrar
           </Button>
 
-          {previewUrl && !isLoading && !errorMessage && (
+          {safeUrlString && !isLoading && !errorMessage && (
             <>
               <Button
                 type="button"
@@ -189,7 +240,7 @@ export function ReceiptPreviewModal({
                 nativeButton={false}
                 render={
                   <a
-                    href={previewUrl}
+                    href={safeUrlString}
                     target="_blank"
                     rel="noopener noreferrer"
                   />
