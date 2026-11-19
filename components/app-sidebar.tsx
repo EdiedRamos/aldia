@@ -1,8 +1,17 @@
 'use client'
 
 import * as React from 'react'
+import Link from 'next/link'
+import {
+  BadgeEuro,
+  Banknote,
+  Bot,
+  LayoutDashboardIcon,
+  ReceiptText,
+  Users,
+} from 'lucide-react'
 
-import { NavMain } from '@/components/nav-main'
+import { NavMain, type NavMainItem } from '@/components/nav-main'
 import { NavUser } from '@/components/nav-user'
 import {
   Sidebar,
@@ -13,44 +22,38 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
-import {
-  LayoutDashboardIcon,
-  Users,
-  BadgeEuro,
-  ReceiptText,
-  Bot,
-  Banknote,
-} from 'lucide-react'
 
-const data = {
-  navMain: [
-    {
-      title: 'Dashboard',
-      url: '/',
-      icon: <LayoutDashboardIcon />,
-    },
-    {
-      title: 'Contactos',
-      url: '#',
-      icon: <Users />,
-    },
-    {
-      title: 'Préstamos',
-      url: '#',
-      icon: <Banknote />,
-    },
-    {
-      title: 'Servicios',
-      url: '/servicios',
-      icon: <ReceiptText />,
-    },
-    {
-      title: 'Bot de WhatsApp',
-      url: '#',
-      icon: <Bot />,
-    },
-  ],
-}
+const NAV_MAIN_ITEMS: NavMainItem[] = [
+  {
+    title: 'Dashboard',
+    url: '/',
+    icon: <LayoutDashboardIcon />,
+  },
+  {
+    title: 'Contactos',
+    icon: <Users />,
+    disabled: true,
+    badgeLabel: 'Próximamente',
+  },
+  {
+    title: 'Préstamos',
+    icon: <Banknote />,
+    disabled: true,
+    badgeLabel: 'Próximamente',
+  },
+  {
+    title: 'Servicios',
+    url: '/servicios',
+    icon: <ReceiptText />,
+  },
+  {
+    title: 'Bot de WhatsApp',
+    icon: <Bot />,
+    disabled: true,
+    badgeLabel: 'Próximamente',
+  },
+]
+
 export function AppSidebar({
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
@@ -67,7 +70,7 @@ export function AppSidebar({
           <SidebarMenuItem>
             <SidebarMenuButton
               className="data-[slot=sidebar-menu-button]:p-1.5!"
-              render={<a href="#" />}
+              render={<Link href="/" />}
             >
               <BadgeEuro className="size-5!" />
               <span className="text-base font-semibold">aldia</span>
@@ -76,7 +79,7 @@ export function AppSidebar({
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain items={NAV_MAIN_ITEMS} />
       </SidebarContent>
       <SidebarFooter>
         {props.user && <NavUser user={props.user} />}
