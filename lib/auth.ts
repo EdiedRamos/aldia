@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 import { decryptSession, SESSION_COOKIE_NAME } from '@/lib/session'
 
 export type CurrentUser = {
+  uid: string
   name: string
   email: string
   avatar: string
@@ -20,6 +21,7 @@ export async function getCurrentUser(): Promise<CurrentUser | null> {
   }
 
   return {
+    uid: session.uid,
     name: session.name,
     email: session.email,
     avatar: session.picture ?? '',
