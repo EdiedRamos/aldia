@@ -1,5 +1,8 @@
 import { generatePeriodRange } from '@/core/domain/period'
-import { validateReceiptFile } from '@/features/services/domain/receipt.policy'
+import {
+  ReceiptPolicyError,
+  validateReceiptFile,
+} from '@/features/services/domain/receipt.policy'
 import type { ServicePayment } from '@/features/services/domain/service.entity'
 import type {
   IReceiptStorage,
@@ -56,6 +59,25 @@ export async function registerPaymentUseCase(
     validated.startPeriod,
     validated.monthsCovered
   )
+
+  const existingPayments = await serviceRepository.findPaymentsByUserId(
+    input.userId
+  )
+  const paidPeriodsForService = new Set(
+    existingPayments
+      .filter((payment) => payment.serviceId === validated.serviceId)
+      .map((payment) => payment.period)
+  )
+  const conflictingPeriod = periods.find((period) =>
+    paidPeriodsForService.has(period)
+  )
+  if (conflictingPeriod) {
+    throw new ReceiptPolicyError(
+      'RECEIPT_ALREADY_EXISTS',
+      `Service payment receipt already exists for service ${validated.serviceId} and period ${conflictingPeriod}`,
+      `El periodo ${conflictingPeriod} ya tiene un comprobante guardado y no puede editarse ni reemplazarse.`
+    )
+  }
 
   const { receiptUrl, receiptPath } = await receiptStorage.uploadReceipt({
     userId: input.userId,

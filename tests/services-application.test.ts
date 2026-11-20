@@ -298,4 +298,48 @@ describe('features/services/application use cases', () => {
     expect(receiptStorage.uploadReceipt).not.toHaveBeenCalled()
     expect(serviceRepository.savePayments).not.toHaveBeenCalled()
   })
+
+  it('registerPaymentUseCase blocks overwriting an existing saved receipt for an already-paid period', async () => {
+    const service: Service = {
+      id: 's1',
+      userId: 'u1',
+      name: 'Internet',
+      billingDay: 15,
+      startPeriod: '2026-11',
+      status: 'ACTIVE',
+      createdAt: '2026-11-01T00:00:00Z',
+    }
+    const existingPayment: ServicePayment = {
+      id: 's1_2026-11',
+      userId: 'u1',
+      serviceId: 's1',
+      period: '2026-11',
+      paidAt: '2026-11-10T00:00:00Z',
+      receiptUrl: 'https://storage.example.com/old.jpg',
+      receiptType: 'IMAGE',
+      receiptPath: 'receipts/u1/s1/2026-11.jpg',
+    }
+    const serviceRepository = createMockRepository({
+      findById: vi.fn().mockResolvedValue(service),
+      findPaymentsByUserId: vi.fn().mockResolvedValue([existingPayment]),
+    })
+    const receiptStorage = createMockReceiptStorage()
+
+    await expect(
+      registerPaymentUseCase(
+        {
+          userId: 'u1',
+          serviceId: 's1',
+          startPeriod: '2026-11',
+          monthsCovered: 1,
+          buffer: Buffer.from('replacement-image'),
+          contentType: 'image/jpeg',
+        },
+        { serviceRepository, receiptStorage }
+      )
+    ).rejects.toMatchObject({ code: 'RECEIPT_ALREADY_EXISTS' })
+
+    expect(receiptStorage.uploadReceipt).not.toHaveBeenCalled()
+    expect(serviceRepository.savePayments).not.toHaveBeenCalled()
+  })
 })
