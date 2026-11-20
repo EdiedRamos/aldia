@@ -9,5 +9,13 @@ service firebase.storage {
         && request.resource.size < 5 * 1024 * 1024
         && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
     }
+
+    match /contacts/{userId}/{contactId}/{fileName} {
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 2 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
   }
 }

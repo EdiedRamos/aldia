@@ -31,9 +31,8 @@ const NAV_MAIN_ITEMS: NavMainItem[] = [
   },
   {
     title: 'Contactos',
+    url: '/contactos',
     icon: <Users />,
-    disabled: true,
-    badgeLabel: 'Próximamente',
   },
   {
     title: 'Préstamos',
