@@ -3,8 +3,7 @@ import { redirect } from 'next/navigation'
 
 import { SiteHeader } from '@/components/site-header'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getServicesBoardUseCase } from '@/features/services/application/get-services-board.use-case'
-import { firestoreServiceRepository } from '@/features/services/infrastructure/firestore-service.repository'
+import { servicesContainer } from '@/features/services/infrastructure/services.container'
 import { ServicesBoardView } from '@/features/services/presentation/components/services-board-view'
 import { getCurrentUser } from '@/lib/auth'
 
@@ -15,9 +14,7 @@ async function ServicesBoardLoader() {
     redirect('/login')
   }
 
-  const board = await getServicesBoardUseCase(user.uid, {
-    serviceRepository: firestoreServiceRepository,
-  })
+  const board = await servicesContainer.getServicesBoard(user.uid)
 
   return <ServicesBoardView board={board} />
 }

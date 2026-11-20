@@ -14,22 +14,24 @@ vi.mock('@/lib/firebase-admin', () => ({
   }),
 }))
 
-import { recordLoginLog } from '@/lib/login-log'
+import { FirestoreLoginAuditRepository } from '@/features/auth/infrastructure/firestore-login-audit.repository'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-describe('recordLoginLog', () => {
+describe('FirestoreLoginAuditRepository', () => {
+  const repository = new FirestoreLoginAuditRepository()
+
   beforeEach(() => {
     vi.resetAllMocks()
   })
 
-  it('writes a log entry to the loginLogs collection', async () => {
+  it('writes an audit entry to the loginLogs collection with 90-day TTL', async () => {
     const before = Date.now()
 
-    await recordLoginLog({
+    await repository.record({
       uid: 'u1',
       email: 'a@b.com',
-      result: 'ok',
+      result: 'SUCCESS',
       ip: '203.0.113.5',
       userAgent: 'test-agent',
     })
@@ -44,7 +46,7 @@ describe('recordLoginLog', () => {
     expect(document).toMatchObject({
       uid: 'u1',
       email: 'a@b.com',
-      result: 'ok',
+      result: 'SUCCESS',
       ip: '203.0.113.5',
       userAgent: 'test-agent',
     })
@@ -57,7 +59,7 @@ describe('recordLoginLog', () => {
   })
 
   it('stores null when ip and user agent are absent', async () => {
-    await recordLoginLog({ uid: 'u1', email: 'a@b.com', result: 'denied' })
+    await repository.record({ uid: 'u1', email: 'a@b.com', result: 'DENIED' })
 
     const document = mocks.add.mock.calls[0][0]
 

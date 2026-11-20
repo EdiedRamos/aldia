@@ -38,75 +38,12 @@ import { formatPeriodLabel, generatePeriodRange } from '@/core/domain/period'
 import type { EnrichedService } from '@/features/services/application/get-services-board.use-case'
 import { registerPaymentAction } from '@/features/services/presentation/actions/service.actions'
 import { ReceiptPreviewModal } from '@/features/services/presentation/components/receipt-preview-modal'
+import { compressImageInBrowser } from '@/lib/utils/image-compression'
 
 interface UploadReceiptDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   service: EnrichedService | null
-}
-
-const MAX_IMAGE_WIDTH = 1600
-const JPEG_QUALITY = 0.8
-
-/**
- * Compresses an image file in the browser using HTML `<canvas>` to save Firebase Storage space.
- */
-async function compressImageInBrowser(file: File): Promise<File> {
-  if (!file.type.startsWith('image/')) {
-    return file
-  }
-
-  return new Promise<File>((resolve) => {
-    const image = new Image()
-    const objectUrl = URL.createObjectURL(file)
-
-    image.onload = () => {
-      URL.revokeObjectURL(objectUrl)
-
-      let { width, height } = image
-      if (width > MAX_IMAGE_WIDTH) {
-        height = Math.round((height * MAX_IMAGE_WIDTH) / width)
-        width = MAX_IMAGE_WIDTH
-      }
-
-      const canvas = document.createElement('canvas')
-      canvas.width = width
-      canvas.height = height
-
-      const context = canvas.getContext('2d')
-      if (!context) {
-        resolve(file)
-        return
-      }
-
-      context.drawImage(image, 0, 0, width, height)
-
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            resolve(file)
-            return
-          }
-
-          const baseName = file.name.replace(/\.[^/.]+$/, '') || 'receipt'
-          const compressedFile = new File([blob], `${baseName}.jpg`, {
-            type: 'image/jpeg',
-            lastModified: Date.now(),
-          })
-          resolve(compressedFile)
-        },
-        'image/jpeg',
-        JPEG_QUALITY
-      )
-    }
-
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl)
-      resolve(file)
-    }
-
-    image.src = objectUrl
-  })
 }
 
 export function UploadReceiptDialog({

@@ -7,6 +7,13 @@ import {
   getCurrentPeriod,
   getNextPeriod,
 } from '@/core/domain/period'
+import {
+  isAllowedReceiptMimeType,
+  MAX_RECEIPT_SIZE_BYTES,
+  ReceiptPolicyError,
+  resolveReceiptExtension,
+  validateReceiptFile,
+} from '@/features/services/domain/receipt.policy'
 import { resolveReferenceCode } from '@/features/services/domain/reference-code'
 import {
   evaluateServiceStatus,
@@ -228,5 +235,75 @@ describe('features/services/domain/service.schemas', () => {
       serviceId: 'srv-1',
     })
     expect(payment.monthsCovered).toBe(1)
+  })
+})
+
+describe('features/services/domain/receipt.policy', () => {
+  it('allows image/* and application/pdf MIME types and rejects others', () => {
+    expect(isAllowedReceiptMimeType('image/jpeg')).toBe(true)
+    expect(isAllowedReceiptMimeType('image/png')).toBe(true)
+    expect(isAllowedReceiptMimeType('application/pdf')).toBe(true)
+    expect(isAllowedReceiptMimeType('text/html')).toBe(false)
+    expect(isAllowedReceiptMimeType('application/javascript')).toBe(false)
+    expect(isAllowedReceiptMimeType('')).toBe(false)
+  })
+
+  it('normalizes and resolves receipt extensions safely', () => {
+    expect(resolveReceiptExtension('application/pdf', 'doc.PDF')).toBe('pdf')
+    expect(resolveReceiptExtension('image/jpeg', 'photo.PNG')).toBe('jpg')
+    expect(resolveReceiptExtension('image/webp', 'photo.webp')).toBe('webp')
+    expect(resolveReceiptExtension('image/avif', 'photo.avif')).toBe('avif')
+    expect(resolveReceiptExtension('image/custom', 'bad..name', '.HEIF')).toBe(
+      'heif'
+    )
+  })
+
+  it('validates valid image and PDF receipts', () => {
+    expect(
+      validateReceiptFile({
+        sizeBytes: 1024,
+        contentType: 'image/png',
+        fileName: 'receipt.png',
+      })
+    ).toEqual({
+      contentType: 'image/png',
+      extension: 'png',
+      receiptType: 'IMAGE',
+    })
+
+    expect(
+      validateReceiptFile({
+        sizeBytes: MAX_RECEIPT_SIZE_BYTES,
+        contentType: 'application/pdf',
+        fileName: 'factura.pdf',
+      })
+    ).toEqual({
+      contentType: 'application/pdf',
+      extension: 'pdf',
+      receiptType: 'PDF',
+    })
+  })
+
+  it('rejects empty files, files larger than 5 MB, and unsupported MIME types', () => {
+    expect(() =>
+      validateReceiptFile({
+        sizeBytes: 0,
+        contentType: 'image/jpeg',
+      })
+    ).toThrow(ReceiptPolicyError)
+
+    expect(() =>
+      validateReceiptFile({
+        sizeBytes: MAX_RECEIPT_SIZE_BYTES + 1,
+        contentType: 'image/jpeg',
+      })
+    ).toThrow(/exceeds maximum size/i)
+
+    expect(() =>
+      validateReceiptFile({
+        sizeBytes: 1024,
+        contentType: 'application/zip',
+      })
+    ).toThrow(/unsupported receipt mime type/i)
   })
 })

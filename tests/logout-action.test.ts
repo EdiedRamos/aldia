@@ -13,16 +13,16 @@ vi.mock('next/navigation', () => ({
   redirect: mocks.redirect,
 }))
 
-import { logout } from '@/lib/actions/auth'
+import { logoutAction } from '@/features/auth/presentation/actions/auth.actions'
 import { SESSION_COOKIE_NAME } from '@/lib/session'
 
-describe('logout action', () => {
+describe('logoutAction', () => {
   beforeEach(() => {
     vi.resetAllMocks()
   })
 
   it('deletes the session cookie and redirects to /login', async () => {
-    await logout()
+    await logoutAction()
 
     expect(mocks.deleteCookie).toHaveBeenCalledWith(SESSION_COOKIE_NAME)
     expect(mocks.redirect).toHaveBeenCalledWith('/login')

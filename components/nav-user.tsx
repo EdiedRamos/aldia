@@ -1,19 +1,15 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-
+import { useState, useTransition } from 'react'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
+  BadgeCheckIcon,
+  BellIcon,
+  ChevronsUpDownIcon,
+  LogOutIcon,
+} from 'lucide-react'
+
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,12 +25,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from '@/components/ui/sidebar'
-import {
-  ChevronsUpDownIcon,
-  BadgeCheckIcon,
-  BellIcon,
-  LogOutIcon,
-} from 'lucide-react'
+import { logoutAction } from '@/features/auth/presentation/actions/auth.actions'
 
 export function NavUser({
   user,
@@ -46,8 +37,8 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
-  const router = useRouter()
   const [logoutOpen, setLogoutOpen] = useState(false)
+  const [isPending, startTransition] = useTransition()
 
   const initials = user.name
     .split(' ')
@@ -56,10 +47,10 @@ export function NavUser({
     .map((part) => part[0].toUpperCase())
     .join('')
 
-  async function handleLogout() {
-    await fetch('/api/auth/logout', { method: 'POST' })
-    router.replace('/login')
-    router.refresh()
+  function handleConfirmLogout() {
+    startTransition(async () => {
+      await logoutAction()
+    })
   }
 
   return (
@@ -109,11 +100,11 @@ export function NavUser({
               <DropdownMenuGroup>
                 <DropdownMenuItem>
                   <BadgeCheckIcon />
-                  Account
+                  Cuenta
                 </DropdownMenuItem>
                 <DropdownMenuItem>
                   <BellIcon />
-                  Notifications
+                  Notificaciones
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />
@@ -122,28 +113,24 @@ export function NavUser({
                 onClick={() => setLogoutOpen(true)}
               >
                 <LogOutIcon />
-                Log out
+                Cerrar sesión
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </SidebarMenuItem>
       </SidebarMenu>
-      <AlertDialog open={logoutOpen} onOpenChange={setLogoutOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>¿Cerrar sesión?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Se cerrará tu sesión y volverás a la pantalla de inicio de sesión.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction variant="destructive" onClick={handleLogout}>
-              Cerrar sesión
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+
+      <ConfirmDialog
+        open={logoutOpen}
+        onOpenChange={setLogoutOpen}
+        title="¿Cerrar sesión?"
+        description="Se cerrará tu sesión y volverás a la pantalla de inicio de sesión."
+        confirmLabel={isPending ? 'Cerrando sesión...' : 'Cerrar sesión'}
+        cancelLabel="Cancelar"
+        variant="destructive"
+        isLoading={isPending}
+        onConfirm={handleConfirmLogout}
+      />
     </>
   )
 }
