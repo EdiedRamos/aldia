@@ -161,10 +161,14 @@ describe('features/contacts/domain/contact.schemas', () => {
 })
 
 describe('features/contacts/domain/contact.policy', () => {
-  it('allows only image/* MIME types and rejects PDFs and non-images', () => {
+  it('allows only image/jpeg, image/png, and image/webp MIME types and rejects others', () => {
     expect(isAllowedContactPhotoMimeType('image/jpeg')).toBe(true)
     expect(isAllowedContactPhotoMimeType('image/png')).toBe(true)
     expect(isAllowedContactPhotoMimeType('image/webp')).toBe(true)
+    expect(isAllowedContactPhotoMimeType('image/heic')).toBe(false)
+    expect(isAllowedContactPhotoMimeType('image/heif')).toBe(false)
+    expect(isAllowedContactPhotoMimeType('image/gif')).toBe(false)
+    expect(isAllowedContactPhotoMimeType('image/svg+xml')).toBe(false)
     expect(isAllowedContactPhotoMimeType('application/pdf')).toBe(false)
     expect(isAllowedContactPhotoMimeType('text/plain')).toBe(false)
     expect(isAllowedContactPhotoMimeType('')).toBe(false)

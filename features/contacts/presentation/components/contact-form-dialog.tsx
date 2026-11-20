@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useTransition } from 'react'
-import { CameraIcon, Trash2Icon } from 'lucide-react'
+import { CameraIcon, LoaderCircleIcon, Trash2Icon } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -34,11 +34,16 @@ import {
   formatPhoneDisplay,
   getContactInitials,
 } from '@/features/contacts/domain/contact.entity'
+import { MAX_CONTACT_PHOTO_SIZE_BYTES } from '@/features/contacts/domain/contact.policy'
 import {
   createContactAction,
   updateContactAction,
 } from '@/features/contacts/presentation/actions/contact.actions'
-import { compressImageInBrowser } from '@/lib/utils/image-compression'
+import {
+  compressImageInBrowser,
+  IMAGE_FILE_ACCEPT,
+  validateClientUploadFile,
+} from '@/lib/utils/image-compression'
 
 const NO_GUARANTOR_VALUE = '__none__'
 const CONTACT_PHOTO_MAX_WIDTH = 512
@@ -66,6 +71,7 @@ export function ContactFormDialog({
   const [notes, setNotes] = useState(contact?.notes ?? '')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null)
+  const [isProcessingPhoto, setIsProcessingPhoto] = useState(false)
   const [removeExistingPhoto, setRemoveExistingPhoto] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -95,27 +101,55 @@ export function ContactFormDialog({
   const displayedPhotoUrl =
     previewObjectUrl ?? (!removeExistingPhoto ? contact?.photoUrl : null)
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null
     if (!file) {
       return
     }
 
-    if (!file.type.startsWith('image/')) {
-      setErrorMessage(
-        'Solo se permiten archivos de imagen para la foto de perfil.'
-      )
+    const validation = validateClientUploadFile(file, {
+      allowPdf: false,
+      maxSizeBytes: MAX_CONTACT_PHOTO_SIZE_BYTES,
+    })
+    if (!validation.ok) {
+      event.target.value = ''
+      toast.error(validation.error)
       return
     }
 
-    if (previewObjectUrl) {
-      URL.revokeObjectURL(previewObjectUrl)
-    }
-
-    setSelectedFile(file)
-    setPreviewObjectUrl(URL.createObjectURL(file))
-    setRemoveExistingPhoto(false)
     setErrorMessage(null)
+    setIsProcessingPhoto(true)
+
+    try {
+      const processedFile = await compressImageInBrowser(file, {
+        maxWidth: CONTACT_PHOTO_MAX_WIDTH,
+        quality: 0.8,
+      })
+
+      if (processedFile.size > MAX_CONTACT_PHOTO_SIZE_BYTES) {
+        event.target.value = ''
+        toast.error('La foto supera el tamaño máximo permitido de 2 MB.')
+        return
+      }
+
+      if (previewObjectUrl) {
+        URL.revokeObjectURL(previewObjectUrl)
+      }
+
+      setSelectedFile(processedFile)
+      setPreviewObjectUrl(URL.createObjectURL(processedFile))
+      setRemoveExistingPhoto(false)
+    } catch (error) {
+      event.target.value = ''
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'No se pudo procesar la foto seleccionada.'
+      setErrorMessage(message)
+      toast.error(message)
+    } finally {
+      setIsProcessingPhoto(false)
+    }
   }
 
   function handleRemovePhoto() {
@@ -171,11 +205,7 @@ export function ContactFormDialog({
       }
 
       if (selectedFile) {
-        const compressedFile = await compressImageInBrowser(selectedFile, {
-          maxWidth: CONTACT_PHOTO_MAX_WIDTH,
-          quality: 0.8,
-        })
-        formData.set('photo', compressedFile)
+        formData.set('photo', selectedFile)
       }
 
       const result =
@@ -235,11 +265,19 @@ export function ContactFormDialog({
                       variant="outline"
                       size="sm"
                       onClick={() => fileInputRef.current?.click()}
-                      disabled={isPending}
+                      disabled={isPending || isProcessingPhoto}
                     >
-                      <CameraIcon className="size-3.5" />
+                      {isProcessingPhoto ? (
+                        <LoaderCircleIcon className="size-3.5 animate-spin" />
+                      ) : (
+                        <CameraIcon className="size-3.5" />
+                      )}
                       <span>
-                        {displayedPhotoUrl ? 'Cambiar foto' : 'Subir foto'}
+                        {isProcessingPhoto
+                          ? 'Procesando...'
+                          : displayedPhotoUrl
+                            ? 'Cambiar foto'
+                            : 'Subir foto'}
                       </span>
                     </Button>
 
@@ -265,7 +303,7 @@ export function ContactFormDialog({
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept={IMAGE_FILE_ACCEPT}
                   className="sr-only"
                   onChange={handleFileChange}
                 />
@@ -372,7 +410,7 @@ export function ContactFormDialog({
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isPending}>
+              <Button type="submit" disabled={isPending || isProcessingPhoto}>
                 {isPending
                   ? 'Guardando...'
                   : isEditing

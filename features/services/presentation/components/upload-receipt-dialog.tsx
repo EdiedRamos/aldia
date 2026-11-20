@@ -1,17 +1,10 @@
 'use client'
 
 import { useEffect, useState, useTransition } from 'react'
-import {
-  ChevronDownIcon,
-  EyeIcon,
-  FileTextIcon,
-  ImageIcon,
-  MinusIcon,
-  PlusIcon,
-  UploadIcon,
-} from 'lucide-react'
+import { ChevronDownIcon, MinusIcon, PlusIcon } from 'lucide-react'
 import { toast } from 'sonner'
 
+import { ReceiptFileInput } from '@/components/receipt-file-input'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,6 +12,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from '@/components/ui/collapsible'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import {
   Field,
   FieldDescription,
@@ -36,9 +30,13 @@ import {
 } from '@/components/ui/sheet'
 import { formatPeriodLabel, generatePeriodRange } from '@/core/domain/period'
 import type { EnrichedService } from '@/features/services/application/get-services-board.use-case'
+import { MAX_RECEIPT_SIZE_BYTES } from '@/features/services/domain/receipt.policy'
 import { registerPaymentAction } from '@/features/services/presentation/actions/service.actions'
 import { ReceiptPreviewModal } from '@/features/services/presentation/components/receipt-preview-modal'
-import { compressImageInBrowser } from '@/lib/utils/image-compression'
+import {
+  compressImageInBrowser,
+  validateClientUploadFile,
+} from '@/lib/utils/image-compression'
 
 interface UploadReceiptDialogProps {
   open: boolean
@@ -54,7 +52,9 @@ export function UploadReceiptDialog({
   const [monthsCovered, setMonthsCovered] = useState(1)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null)
+  const [isProcessingFile, setIsProcessingFile] = useState(false)
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
+  const [confirmSaveOpen, setConfirmSaveOpen] = useState(false)
   const [advanceOpen, setAdvanceOpen] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -78,15 +78,58 @@ export function UploadReceiptDialog({
     setMonthsCovered((current) => Math.min(12, Math.max(1, current + delta)))
   }
 
-  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0] ?? null
+    if (!file) {
+      return
+    }
 
+    const validation = validateClientUploadFile(file, {
+      allowPdf: true,
+      maxSizeBytes: MAX_RECEIPT_SIZE_BYTES,
+    })
+    if (!validation.ok) {
+      event.target.value = ''
+      toast.error(validation.error)
+      return
+    }
+
+    setErrorMessage(null)
+    setIsProcessingFile(true)
+
+    try {
+      const processedFile = await compressImageInBrowser(file)
+      if (processedFile.size > MAX_RECEIPT_SIZE_BYTES) {
+        event.target.value = ''
+        toast.error('El archivo supera el tamaño máximo permitido de 5 MB.')
+        return
+      }
+
+      if (previewObjectUrl) {
+        URL.revokeObjectURL(previewObjectUrl)
+      }
+
+      setSelectedFile(processedFile)
+      setPreviewObjectUrl(URL.createObjectURL(processedFile))
+    } catch (error) {
+      event.target.value = ''
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'No se pudo procesar el archivo seleccionado.'
+      setErrorMessage(message)
+      toast.error(message)
+    } finally {
+      setIsProcessingFile(false)
+    }
+  }
+
+  function handleRemoveFile() {
     if (previewObjectUrl) {
       URL.revokeObjectURL(previewObjectUrl)
     }
-
-    setSelectedFile(file)
-    setPreviewObjectUrl(file ? URL.createObjectURL(file) : null)
+    setSelectedFile(null)
+    setPreviewObjectUrl(null)
     setErrorMessage(null)
   }
 
@@ -95,11 +138,12 @@ export function UploadReceiptDialog({
       URL.revokeObjectURL(previewObjectUrl)
       setPreviewObjectUrl(null)
       setPreviewModalOpen(false)
+      setConfirmSaveOpen(false)
     }
     onOpenChange(nextOpen)
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function handleRequestSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!service) {
       return
@@ -111,23 +155,30 @@ export function UploadReceiptDialog({
     }
 
     setErrorMessage(null)
+    setConfirmSaveOpen(true)
+  }
+
+  function handleConfirmSave() {
+    if (!service || !selectedFile) {
+      return
+    }
 
     startTransition(async () => {
-      const processedFile = await compressImageInBrowser(selectedFile)
-
       const formData = new FormData()
       formData.set('serviceId', service.id)
       formData.set('startPeriod', startPeriod)
       formData.set('monthsCovered', String(monthsCovered))
-      formData.set('file', processedFile)
+      formData.set('file', selectedFile)
 
       const result = await registerPaymentAction(formData)
 
       if (!result.ok) {
+        setConfirmSaveOpen(false)
         setErrorMessage(result.error)
         return
       }
 
+      setConfirmSaveOpen(false)
       toast.success(
         monthsCovered > 1
           ? `Comprobante registrado para ${monthsCovered} meses.`
@@ -154,65 +205,26 @@ export function UploadReceiptDialog({
             </SheetDescription>
           </SheetHeader>
 
-          <form onSubmit={handleSubmit} className="flex flex-1 flex-col px-4">
+          <form
+            onSubmit={handleRequestSubmit}
+            className="flex flex-1 flex-col px-4"
+          >
             <FieldGroup>
               <Field>
                 <FieldLabel htmlFor="receipt-file-input">
                   Comprobante de pago (imagen o PDF, máx. 5 MB)
                 </FieldLabel>
-                <label
-                  htmlFor="receipt-file-input"
-                  className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center transition-colors hover:bg-muted/60"
-                >
-                  {selectedFile ? (
-                    <>
-                      {selectedFile.type === 'application/pdf' ? (
-                        <FileTextIcon className="size-8 text-primary" />
-                      ) : (
-                        <ImageIcon className="size-8 text-primary" />
-                      )}
-                      <span className="max-w-full truncate text-sm font-medium">
-                        {selectedFile.name}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {(selectedFile.size / 1024).toFixed(0)} KB · Haz clic
-                        para cambiar
-                      </span>
-                    </>
-                  ) : (
-                    <>
-                      <UploadIcon className="size-8 text-muted-foreground" />
-                      <span className="text-sm font-medium">
-                        Seleccionar foto o PDF del recibo
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        Las imágenes se optimizan automáticamente antes de subir
-                      </span>
-                    </>
-                  )}
-                  <input
-                    id="receipt-file-input"
-                    type="file"
-                    accept="image/*,application/pdf"
-                    className="sr-only"
-                    onChange={handleFileChange}
-                  />
-                </label>
-
-                {selectedFile && previewObjectUrl && (
-                  <div className="pt-1">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => setPreviewModalOpen(true)}
-                    >
-                      <EyeIcon className="size-3.5" />
-                      <span>Ver comprobante seleccionado</span>
-                    </Button>
-                  </div>
-                )}
+                <ReceiptFileInput
+                  id="receipt-file-input"
+                  file={selectedFile}
+                  previewUrl={previewObjectUrl}
+                  isProcessing={isProcessingFile}
+                  disabled={isPending}
+                  placeholderTitle="Seleccionar foto o PDF del recibo"
+                  onFileChange={handleFileChange}
+                  onRemove={handleRemoveFile}
+                  onOpenFullPreview={() => setPreviewModalOpen(true)}
+                />
               </Field>
 
               <Collapsible open={advanceOpen} onOpenChange={setAdvanceOpen}>
@@ -292,11 +304,14 @@ export function UploadReceiptDialog({
                   type="button"
                   variant="outline"
                   onClick={() => handleSheetOpenChange(false)}
-                  disabled={isPending}
+                  disabled={isPending || isProcessingFile}
                 >
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={isPending || !selectedFile}>
+                <Button
+                  type="submit"
+                  disabled={isPending || isProcessingFile || !selectedFile}
+                >
                   {isPending ? 'Subiendo recibo...' : 'Registrar pago'}
                 </Button>
               </div>
@@ -315,6 +330,17 @@ export function UploadReceiptDialog({
         previewUrl={previewObjectUrl}
         fileType={selectedFile?.type}
         fileName={selectedFile?.name}
+      />
+
+      <ConfirmDialog
+        open={confirmSaveOpen}
+        onOpenChange={setConfirmSaveOpen}
+        title="Confirmar guardado de comprobante"
+        description="¿Estás seguro de guardar este comprobante? Recuerda que una vez registrado no se puede editar ni reemplazar."
+        cancelLabel="Revisar archivo"
+        confirmLabel={isPending ? 'Guardando...' : 'Sí, guardar comprobante'}
+        isLoading={isPending}
+        onConfirm={handleConfirmSave}
       />
     </>
   )

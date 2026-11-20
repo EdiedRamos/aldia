@@ -7,7 +7,7 @@ service firebase.storage {
       allow create, update: if request.auth != null
         && request.auth.uid == userId
         && request.resource.size < 5 * 1024 * 1024
-        && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
     }
 
     match /contacts/{userId}/{contactId}/{fileName} {
@@ -15,7 +15,15 @@ service firebase.storage {
       allow create, update: if request.auth != null
         && request.auth.uid == userId
         && request.resource.size < 2 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp'];
+    }
+
+    match /loans/{userId}/{loanId}/{fileName} {
+      allow read, delete: if request.auth != null && request.auth.uid == userId;
+      allow create, update: if request.auth != null
+        && request.auth.uid == userId
+        && request.resource.size < 5 * 1024 * 1024
+        && request.resource.contentType in ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
     }
   }
 }

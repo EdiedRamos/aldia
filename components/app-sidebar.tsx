@@ -36,9 +36,8 @@ const NAV_MAIN_ITEMS: NavMainItem[] = [
   },
   {
     title: 'Préstamos',
+    url: '/prestamos',
     icon: <Banknote />,
-    disabled: true,
-    badgeLabel: 'Próximamente',
   },
   {
     title: 'Servicios',

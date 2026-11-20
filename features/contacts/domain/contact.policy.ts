@@ -1,6 +1,10 @@
 export const MAX_CONTACT_PHOTO_SIZE_BYTES = 2 * 1024 * 1024
 
-export const ALLOWED_CONTACT_PHOTO_MIME_PREFIXES = ['image/'] as const
+export const ALLOWED_CONTACT_PHOTO_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+] as const
 
 export const CONTACT_PHOTO_SIGNED_URL_TTL_SECONDS = 3600
 
@@ -39,7 +43,8 @@ export interface ValidatedContactPhotoFile {
 }
 
 /**
- * Checks whether a MIME type is allowed for contact profile photos (`image/*` only).
+ * Checks whether a MIME type is allowed for contact profile photos
+ * (`image/jpeg`, `image/png`, or `image/webp` only).
  */
 export function isAllowedContactPhotoMimeType(contentType: string): boolean {
   const normalized = contentType.trim().toLowerCase()
@@ -47,8 +52,8 @@ export function isAllowedContactPhotoMimeType(contentType: string): boolean {
     return false
   }
 
-  return ALLOWED_CONTACT_PHOTO_MIME_PREFIXES.some((prefix) =>
-    normalized.startsWith(prefix)
+  return ALLOWED_CONTACT_PHOTO_MIME_TYPES.includes(
+    normalized as (typeof ALLOWED_CONTACT_PHOTO_MIME_TYPES)[number]
   )
 }
 
@@ -197,7 +202,7 @@ export function validateContactPhotoFile(
     throw new ContactPhotoPolicyError(
       'UNSUPPORTED_MIME_TYPE',
       `Unsupported contact photo MIME type: ${input.contentType}`,
-      'Solo se permiten archivos de imagen para la foto de perfil.'
+      'Solo se permiten imágenes en formato JPG, PNG o WebP para la foto de perfil.'
     )
   }
 
