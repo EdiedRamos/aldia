@@ -2,11 +2,18 @@ import type { ReceiptType } from '@/features/services/domain/service.entity'
 
 export const MAX_RECEIPT_SIZE_BYTES = 5 * 1024 * 1024
 
-export const ALLOWED_RECEIPT_MIME_TYPES = ['application/pdf'] as const
-export const ALLOWED_RECEIPT_MIME_PREFIXES = ['image/'] as const
+export const ALLOWED_RECEIPT_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'application/pdf',
+] as const
 
 export type ReceiptPolicyErrorCode =
-  'EMPTY_FILE' | 'FILE_TOO_LARGE' | 'UNSUPPORTED_MIME_TYPE'
+  | 'EMPTY_FILE'
+  | 'FILE_TOO_LARGE'
+  | 'UNSUPPORTED_MIME_TYPE'
+  | 'RECEIPT_ALREADY_EXISTS'
 
 export class ReceiptPolicyError extends Error {
   readonly code: ReceiptPolicyErrorCode
@@ -38,7 +45,8 @@ export interface ValidatedReceiptFile {
 }
 
 /**
- * Checks whether a MIME type is allowed for service payment receipts (`image/*` or `application/pdf`).
+ * Checks whether a MIME type is allowed for service payment receipts
+ * (`image/jpeg`, `image/png`, `image/webp`, or `application/pdf`).
  */
 export function isAllowedReceiptMimeType(contentType: string): boolean {
   const normalized = contentType.trim().toLowerCase()
@@ -46,16 +54,8 @@ export function isAllowedReceiptMimeType(contentType: string): boolean {
     return false
   }
 
-  if (
-    ALLOWED_RECEIPT_MIME_TYPES.includes(
-      normalized as (typeof ALLOWED_RECEIPT_MIME_TYPES)[number]
-    )
-  ) {
-    return true
-  }
-
-  return ALLOWED_RECEIPT_MIME_PREFIXES.some((prefix) =>
-    normalized.startsWith(prefix)
+  return ALLOWED_RECEIPT_MIME_TYPES.includes(
+    normalized as (typeof ALLOWED_RECEIPT_MIME_TYPES)[number]
   )
 }
 
@@ -153,7 +153,7 @@ export function validateReceiptFile(
     throw new ReceiptPolicyError(
       'UNSUPPORTED_MIME_TYPE',
       `Unsupported receipt MIME type: ${input.contentType}`,
-      'Solo se permiten imágenes o archivos PDF.'
+      'Solo se permiten imágenes (JPG, PNG, WebP) o archivos PDF.'
     )
   }
 

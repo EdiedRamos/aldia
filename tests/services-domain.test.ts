@@ -239,10 +239,15 @@ describe('features/services/domain/service.schemas', () => {
 })
 
 describe('features/services/domain/receipt.policy', () => {
-  it('allows image/* and application/pdf MIME types and rejects others', () => {
+  it('allows only image/jpeg, image/png, image/webp, and application/pdf MIME types', () => {
     expect(isAllowedReceiptMimeType('image/jpeg')).toBe(true)
     expect(isAllowedReceiptMimeType('image/png')).toBe(true)
+    expect(isAllowedReceiptMimeType('image/webp')).toBe(true)
     expect(isAllowedReceiptMimeType('application/pdf')).toBe(true)
+    expect(isAllowedReceiptMimeType('image/heic')).toBe(false)
+    expect(isAllowedReceiptMimeType('image/heif')).toBe(false)
+    expect(isAllowedReceiptMimeType('image/gif')).toBe(false)
+    expect(isAllowedReceiptMimeType('image/svg+xml')).toBe(false)
     expect(isAllowedReceiptMimeType('text/html')).toBe(false)
     expect(isAllowedReceiptMimeType('application/javascript')).toBe(false)
     expect(isAllowedReceiptMimeType('')).toBe(false)
