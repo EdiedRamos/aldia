@@ -14,6 +14,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { RECEIPT_FILE_ACCEPT } from '@/lib/utils/image-compression'
+import { parseSafeDownloadUrl } from '@/lib/utils/safe-download'
 
 interface ReceiptFileInputProps {
   id: string
@@ -42,6 +43,8 @@ export function ReceiptFileInput({
 }: ReceiptFileInputProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const isPdf = file?.type === 'application/pdf'
+  const safeParsedUrl = parseSafeDownloadUrl(previewUrl)
+  const safePreviewUrl = safeParsedUrl ? safeParsedUrl.toString() : null
 
   function handleTriggerChange() {
     if (inputRef.current) {
@@ -79,7 +82,7 @@ export function ReceiptFileInput({
             Convirtiendo y optimizando antes de previsualizar
           </span>
         </div>
-      ) : file && previewUrl ? (
+      ) : file && safePreviewUrl ? (
         <div className="flex flex-col gap-2.5 rounded-xl border bg-muted/20 p-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2">
@@ -98,14 +101,14 @@ export function ReceiptFileInput({
           <div className="overflow-hidden rounded-lg border bg-background">
             {isPdf ? (
               <iframe
-                src={previewUrl}
+                src={safePreviewUrl}
                 title={`Vista previa de ${file.name}`}
                 className="h-52 w-full border-0"
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={previewUrl}
+                src={safePreviewUrl}
                 alt={`Vista previa de ${file.name}`}
                 className="max-h-52 w-full object-contain"
               />
