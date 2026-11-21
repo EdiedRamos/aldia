@@ -4,6 +4,7 @@ import { useState } from 'react'
 import {
   AlertTriangleIcon,
   BanknoteIcon,
+  MessageSquareTextIcon,
   PlusIcon,
   SearchIcon,
   TrendingUpIcon,
@@ -28,6 +29,7 @@ import type {
 } from '@/features/loans/application/get-loans-board.use-case'
 import { formatCurrency } from '@/features/loans/domain/loan.entity'
 import { resolveLoanReceiptTypeFromPath } from '@/features/loans/domain/loan.policy'
+import type { WhatsAppMessageTemplates } from '@/features/loans/domain/loan-whatsapp-template'
 import { getLoanReceiptPreviewAction } from '@/features/loans/presentation/actions/loan.actions'
 import {
   AttachLoanReceiptDialog,
@@ -38,6 +40,7 @@ import { LoanDetailSheet } from '@/features/loans/presentation/components/loan-d
 import { LoanFormSheet } from '@/features/loans/presentation/components/loan-form-sheet'
 import { LoanPaymentSheet } from '@/features/loans/presentation/components/loan-payment-sheet'
 import { RefinanceLoanSheet } from '@/features/loans/presentation/components/refinance-loan-sheet'
+import { WhatsAppTemplatesDialog } from '@/features/loans/presentation/components/whatsapp-templates-dialog'
 import { ReceiptPreviewModal } from '@/features/services/presentation/components/receipt-preview-modal'
 
 type LoanFilterTab =
@@ -46,6 +49,7 @@ type LoanFilterTab =
 interface LoansBoardViewProps {
   board: LoansBoard
   contacts: EnrichedContact[]
+  whatsAppTemplates: WhatsAppMessageTemplates
 }
 
 interface ReceiptPreviewState {
@@ -127,10 +131,17 @@ function matchesFilterTab(loan: EnrichedLoan, tab: LoanFilterTab): boolean {
   }
 }
 
-export function LoansBoardView({ board, contacts }: LoansBoardViewProps) {
+export function LoansBoardView({
+  board,
+  contacts,
+  whatsAppTemplates: initialTemplates,
+}: LoansBoardViewProps) {
   const [activeTab, setActiveTab] = useState<LoanFilterTab>('ACTIVE')
   const [searchQuery, setSearchQuery] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [whatsAppTemplates, setWhatsAppTemplates] =
+    useState<WhatsAppMessageTemplates>(initialTemplates)
   const [paymentLoanId, setPaymentLoanId] = useState<string | null>(null)
   const [detailLoanId, setDetailLoanId] = useState<string | null>(null)
   const [refinanceLoanId, setRefinanceLoanId] = useState<string | null>(null)
@@ -326,10 +337,21 @@ export function LoansBoardView({ board, contacts }: LoansBoardViewProps) {
             </TabsList>
           </Tabs>
 
-          <Button onClick={() => setCreateOpen(true)} size="sm">
-            <PlusIcon />
-            <span>Nuevo Préstamo</span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setTemplatesOpen(true)}
+            >
+              <MessageSquareTextIcon className="size-3.5" />
+              <span>Configurar mensajes</span>
+            </Button>
+            <Button onClick={() => setCreateOpen(true)} size="sm">
+              <PlusIcon />
+              <span>Nuevo Préstamo</span>
+            </Button>
+          </div>
         </div>
 
         <div className="relative w-full max-w-md">
@@ -402,6 +424,7 @@ export function LoansBoardView({ board, contacts }: LoansBoardViewProps) {
             <LoanCard
               key={loan.id}
               loan={loan}
+              whatsAppTemplates={whatsAppTemplates}
               onRegisterPayment={(target) => setPaymentLoanId(target.id)}
               onViewDetail={(target) => setDetailLoanId(target.id)}
               onRefinance={(target) => setRefinanceLoanId(target.id)}
@@ -413,6 +436,16 @@ export function LoansBoardView({ board, contacts }: LoansBoardViewProps) {
       )}
 
       {/* Sheets & Modals */}
+      {templatesOpen && (
+        <WhatsAppTemplatesDialog
+          key={`${whatsAppTemplates.directLoanTemplate.length}-${whatsAppTemplates.thirdPartyLoanTemplate.length}`}
+          open={templatesOpen}
+          onOpenChange={setTemplatesOpen}
+          initialTemplates={whatsAppTemplates}
+          onSaved={setWhatsAppTemplates}
+        />
+      )}
+
       {createOpen && (
         <LoanFormSheet
           key="new-loan"

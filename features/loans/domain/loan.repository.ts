@@ -6,6 +6,7 @@ import type {
   LoanPayment,
   LoanStatus,
 } from '@/features/loans/domain/loan.entity'
+import type { WhatsAppMessageTemplates } from '@/features/loans/domain/loan-whatsapp-template'
 
 export interface CreateLoanData {
   userId: string
@@ -73,4 +74,12 @@ export interface ILoanReceiptStorage {
     expiresInSeconds?: number
   ): Promise<string>
   deleteReceipt(receiptPath: string): Promise<void>
+}
+
+export interface ILoanSettingsRepository {
+  getWhatsAppTemplates(userId: string): Promise<WhatsAppMessageTemplates>
+  saveWhatsAppTemplates(
+    userId: string,
+    templates: WhatsAppMessageTemplates
+  ): Promise<WhatsAppMessageTemplates>
 }

@@ -4,14 +4,19 @@ import {
   buildUpcomingEventsRadar,
 } from '@/features/dashboard/domain/calendar-aggregator'
 import type { DashboardOverview } from '@/features/dashboard/domain/dashboard.types'
-import type { ILoanRepository } from '@/features/loans/domain/loan.repository'
+import type {
+  ILoanRepository,
+  ILoanSettingsRepository,
+} from '@/features/loans/domain/loan.repository'
 import { formatReferenceDateToIsoDate } from '@/features/loans/domain/loan-schedule.calculator'
+import { DEFAULT_WHATSAPP_TEMPLATES } from '@/features/loans/domain/loan-whatsapp-template'
 import type { IServiceRepository } from '@/features/services/domain/service.repository'
 
 export interface GetDashboardOverviewDependencies {
   serviceRepository: IServiceRepository
   loanRepository: ILoanRepository
   contactRepository: IContactRepository
+  loanSettingsRepository?: ILoanSettingsRepository
   referenceDate?: Date | string
   month?: number
   year?: number
@@ -27,17 +32,22 @@ export async function getDashboardOverviewUseCase(
     serviceRepository,
     loanRepository,
     contactRepository,
+    loanSettingsRepository,
     referenceDate = new Date(),
     month,
     year,
   }: GetDashboardOverviewDependencies
 ): Promise<DashboardOverview> {
-  const [services, servicePayments, loans, contacts] = await Promise.all([
-    serviceRepository.findByUserId(userId),
-    serviceRepository.findPaymentsByUserId(userId),
-    loanRepository.findByUserId(userId),
-    contactRepository.findByUserId(userId),
-  ])
+  const [services, servicePayments, loans, contacts, whatsAppTemplates] =
+    await Promise.all([
+      serviceRepository.findByUserId(userId),
+      serviceRepository.findPaymentsByUserId(userId),
+      loanRepository.findByUserId(userId),
+      contactRepository.findByUserId(userId),
+      loanSettingsRepository
+        ? loanSettingsRepository.getWhatsAppTemplates(userId)
+        : Promise.resolve({ ...DEFAULT_WHATSAPP_TEMPLATES }),
+    ])
 
   const todayIso = formatReferenceDateToIsoDate(referenceDate)
   const [currentYear, currentMonth] = todayIso.split('-').map(Number)
@@ -74,5 +84,6 @@ export async function getDashboardOverviewUseCase(
       loans,
       contacts,
     },
+    whatsAppTemplates,
   }
 }

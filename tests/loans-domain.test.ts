@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
+import { getWhatsAppTemplatesUseCase } from '@/features/loans/application/get-whatsapp-templates.use-case'
+import { updateWhatsAppTemplatesUseCase } from '@/features/loans/application/update-whatsapp-templates.use-case'
 import {
   buildLoanReminderMessage,
   buildLoanWhatsAppUrl,
@@ -17,13 +19,23 @@ import {
   resolveLoanReceiptTypeFromPath,
   validateLoanReceiptFile,
 } from '@/features/loans/domain/loan.policy'
+import type { ILoanSettingsRepository } from '@/features/loans/domain/loan.repository'
 import {
   createLoanSchema,
   refinanceLoanSchema,
   registerLoanPaymentSchema,
   updateInstallmentSchema,
   voidLoanPaymentSchema,
+  whatsAppTemplatesSchema,
 } from '@/features/loans/domain/loan.schemas'
+import {
+  buildTemplatedLoanWhatsAppUrl,
+  buildWhatsAppSendUrl,
+  DEFAULT_DIRECT_LOAN_TEMPLATE,
+  DEFAULT_THIRD_PARTY_LOAN_TEMPLATE,
+  DEFAULT_WHATSAPP_TEMPLATES,
+  renderWhatsAppLoanMessage,
+} from '@/features/loans/domain/loan-whatsapp-template'
 import {
   addMonthsToIsoDate,
   applyInstallmentUpdate,
@@ -1085,5 +1097,166 @@ describe('features/loans/domain - OPEN_ENDED with monthly interest & reminders',
     expect(message).toContain('Pedro Tercero')
     expect(message).toContain('20 dic 2026')
     expect(message).toContain('80.000')
+  })
+})
+
+describe('features/loans/domain/loan-whatsapp-template', () => {
+  it('renders default direct and third-party templates with emojis and all dynamic variables', () => {
+    const directMessage = renderWhatsAppLoanMessage({
+      template: DEFAULT_DIRECT_LOAN_TEMPLATE,
+      recipientName: 'Laura Gómez',
+      debtorName: 'Laura Gómez',
+      amountFormatted: '$250.000',
+      dueDateFormatted: '15 dic 2026',
+      remainingPrincipalFormatted: '$1.000.000',
+    })
+
+    expect(directMessage).toBe(
+      'Hola Laura Gómez \u{1F44B}, te recuerdo que el *15 dic 2026* vence tu pago por *$250.000* (saldo pendiente: $1.000.000). ¡Quedo atento! \u{1F60A}'
+    )
+    expect(directMessage).not.toContain('\uFFFD')
+
+    const thirdPartyMessage = renderWhatsAppLoanMessage({
+      template: DEFAULT_THIRD_PARTY_LOAN_TEMPLATE,
+      recipientName: 'Carlos Ruiz',
+      debtorName: 'Pedro Pérez',
+      amountFormatted: '$150.000',
+      dueDateFormatted: '20 dic 2026',
+      remainingPrincipalFormatted: '$750.000',
+    })
+
+    expect(thirdPartyMessage).toBe(
+      'Hola Carlos Ruiz \u{1F44B}, te escribo respecto al préstamo de Pedro Pérez. El *20 dic 2026* vence el pago por *$150.000* (saldo pendiente: $750.000). ¡Muchas gracias! \u{1F64F}'
+    )
+    expect(thirdPartyMessage).not.toContain('\uFFFD')
+  })
+
+  it('safely renders custom templates with omitted variables, repeated variables, and values containing braces', () => {
+    const shortCustom = renderWhatsAppLoanMessage({
+      template:
+        'Buenas {{nombre}}, recuerda el pago de {{monto}}. ¡Gracias {{nombre}}!',
+      recipientName: 'Ana {{monto}}',
+      debtorName: 'Ana',
+      amountFormatted: '$80.000',
+      dueDateFormatted: '10 dic 2026',
+      remainingPrincipalFormatted: '$400.000',
+    })
+
+    expect(shortCustom).toBe(
+      'Buenas Ana {{monto}}, recuerda el pago de $80.000. ¡Gracias Ana {{monto}}!'
+    )
+
+    const noVariables = renderWhatsAppLoanMessage({
+      template: 'Hola, ¿cómo vas con el pago de este mes?',
+      recipientName: 'Luis',
+      debtorName: 'Luis',
+      amountFormatted: '$50.000',
+      dueDateFormatted: '05 dic 2026',
+      remainingPrincipalFormatted: '$200.000',
+    })
+
+    expect(noVariables).toBe('Hola, ¿cómo vas con el pago de este mes?')
+  })
+
+  it('builds api.whatsapp.com/send URLs preserving UTF-8 emojis and selecting direct vs third-party templates', () => {
+    const emojiMessage = 'Hola Laura 👋, pago de *$250.000* 😊🙏'
+    const sendUrl = buildWhatsAppSendUrl('+57 300 111 2233', emojiMessage)
+    const parsedUrl = new URL(sendUrl)
+
+    expect(parsedUrl.origin + parsedUrl.pathname).toBe(
+      'https://api.whatsapp.com/send'
+    )
+    expect(parsedUrl.searchParams.get('phone')).toBe('573001112233')
+    expect(parsedUrl.searchParams.get('text')).toBe(emojiMessage)
+    // Verify raw UTF-8 percent-encoding for multi-byte emojis (e.g. 👋 = %F0%9F%91%8B)
+    expect(sendUrl).toContain('%F0%9F%91%8B')
+    expect(sendUrl).toContain('%F0%9F%98%8A')
+    expect(sendUrl).toContain('%F0%9F%99%8F')
+
+    expect(buildWhatsAppSendUrl('+573001112233', '   ')).toBe(
+      'https://api.whatsapp.com/send?phone=573001112233'
+    )
+
+    const customTemplates = {
+      directLoanTemplate:
+        'Directo para {{nombre}} 👋: *{{monto}}* el {{fecha}}.',
+      thirdPartyLoanTemplate:
+        'Tercero para {{nombre}} 🙏 sobre {{deudor}}: *{{monto}}* (saldo {{saldo}}).',
+    }
+
+    const directUrl = buildTemplatedLoanWhatsAppUrl({
+      phone: '+573001112233',
+      templates: customTemplates,
+      isViaIntermediary: false,
+      contactName: 'Sofía Castro',
+      guarantorName: null,
+      amountFormatted: '$120.000',
+      dueDateFormatted: '18 dic 2026',
+      remainingPrincipalFormatted: '$600.000',
+    })
+
+    expect(directUrl).toBe(
+      `https://api.whatsapp.com/send?phone=573001112233&text=${encodeURIComponent('Directo para Sofía Castro 👋: *$120.000* el 18 dic 2026.')}`
+    )
+
+    const thirdPartyUrl = buildTemplatedLoanWhatsAppUrl({
+      phone: '+573109998877',
+      templates: customTemplates,
+      isViaIntermediary: true,
+      contactName: 'Mateo Díaz',
+      guarantorName: 'Carlos Codeudor',
+      amountFormatted: '$200.000',
+      dueDateFormatted: '22 dic 2026',
+      remainingPrincipalFormatted: '$800.000',
+    })
+
+    expect(thirdPartyUrl).toBe(
+      `https://api.whatsapp.com/send?phone=573109998877&text=${encodeURIComponent('Tercero para Carlos Codeudor 🙏 sobre Mateo Díaz: *$200.000* (saldo $800.000).')}`
+    )
+  })
+
+  it('validates whatsAppTemplatesSchema and executes get/update use cases', async () => {
+    expect(
+      whatsAppTemplatesSchema.safeParse({
+        directLoanTemplate: '   ',
+        thirdPartyLoanTemplate: 'Hola {{nombre}}',
+      }).success
+    ).toBe(false)
+
+    expect(
+      whatsAppTemplatesSchema.safeParse({
+        directLoanTemplate: 'a'.repeat(1001),
+        thirdPartyLoanTemplate: 'Hola {{nombre}}',
+      }).success
+    ).toBe(false)
+
+    const repo: ILoanSettingsRepository = {
+      getWhatsAppTemplates: vi
+        .fn()
+        .mockResolvedValue({ ...DEFAULT_WHATSAPP_TEMPLATES }),
+      saveWhatsAppTemplates: vi
+        .fn()
+        .mockImplementation(async (_userId, templates) => templates),
+    }
+
+    const loaded = await getWhatsAppTemplatesUseCase('user-1', {
+      loanSettingsRepository: repo,
+    })
+    expect(loaded).toEqual(DEFAULT_WHATSAPP_TEMPLATES)
+
+    const saved = await updateWhatsAppTemplatesUseCase(
+      'user-1',
+      {
+        directLoanTemplate: '  Hola {{nombre}}, tu cuota es {{monto}}.  ',
+        thirdPartyLoanTemplate: '  Hola {{nombre}}, cuota de {{deudor}}.  ',
+      },
+      { loanSettingsRepository: repo }
+    )
+
+    expect(saved).toEqual({
+      directLoanTemplate: 'Hola {{nombre}}, tu cuota es {{monto}}.',
+      thirdPartyLoanTemplate: 'Hola {{nombre}}, cuota de {{deudor}}.',
+    })
+    expect(repo.saveWhatsAppTemplates).toHaveBeenCalledWith('user-1', saved)
   })
 })

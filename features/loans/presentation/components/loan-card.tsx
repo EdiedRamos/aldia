@@ -41,18 +41,21 @@ import {
 import { getContactInitials } from '@/features/contacts/domain/contact.entity'
 import type { EnrichedLoan } from '@/features/loans/application/get-loans-board.use-case'
 import {
-  buildLoanReminderMessage,
-  buildLoanWhatsAppUrl,
   formatCurrency,
   INTEREST_MODEL_LABELS,
   roundCurrency,
 } from '@/features/loans/domain/loan.entity'
 import { formatIsoDateDisplay } from '@/features/loans/domain/loan-schedule.calculator'
+import {
+  buildTemplatedLoanWhatsAppUrl,
+  type WhatsAppMessageTemplates,
+} from '@/features/loans/domain/loan-whatsapp-template'
 import { archiveLoanAction } from '@/features/loans/presentation/actions/loan.actions'
 import type { LoanReceiptAttachTarget } from '@/features/loans/presentation/components/attach-loan-receipt-dialog'
 
 interface LoanCardProps {
   loan: EnrichedLoan
+  whatsAppTemplates: WhatsAppMessageTemplates
   onRegisterPayment: (loan: EnrichedLoan) => void
   onViewDetail: (loan: EnrichedLoan) => void
   onRefinance: (loan: EnrichedLoan) => void
@@ -66,6 +69,7 @@ interface LoanCardProps {
 
 export function LoanCard({
   loan,
+  whatsAppTemplates,
   onRegisterPayment,
   onViewDetail,
   onRefinance,
@@ -100,29 +104,37 @@ export function LoanCard({
       : loan.currentCycleInterestDue
     : null
 
+  const dueAmountForTemplate = isOpenEndedWithInterest
+    ? (openEndedMonthlyInterestDue ?? loan.totals.remainingTotal)
+    : loan.nextInstallment
+      ? (nextInstallmentRemaining ?? loan.totals.remainingTotal)
+      : loan.totals.remainingTotal
+
+  const dueDateForTemplate =
+    isOpenEndedWithInterest && loan.nextInterestDueDate
+      ? formatIsoDateDisplay(loan.nextInterestDueDate)
+      : loan.nextInstallment
+        ? formatIsoDateDisplay(loan.nextInstallment.dueDate)
+        : 'la fecha acordada'
+
+  const remainingBalanceForTemplate =
+    loan.totals.remainingPrincipal > 0
+      ? loan.totals.remainingPrincipal
+      : loan.totals.remainingTotal
+
   const whatsappUrl = loan.effectivePhone
-    ? buildLoanWhatsAppUrl(
-        loan.effectivePhone,
-        buildLoanReminderMessage({
-          contactName: loan.contact.name,
-          guarantorName: loan.guarantorContact?.name ?? null,
-          isViaIntermediary: loan.isViaIntermediary,
-          interestModel: loan.interestModel,
-          interestRate: loan.interestRate,
-          remainingPrincipal: loan.totals.remainingPrincipal,
-          remainingTotal: loan.totals.remainingTotal,
-          isOverdue: loan.isOverdue,
-          overdueDays: loan.overdueDays,
-          openEndedMonthlyInterestDue,
-          nextInterestDueDate: loan.nextInterestDueDate
-            ? formatIsoDateDisplay(loan.nextInterestDueDate)
-            : null,
-          nextInstallmentDueDate: loan.nextInstallment
-            ? formatIsoDateDisplay(loan.nextInstallment.dueDate)
-            : null,
-          nextInstallmentRemaining,
-        })
-      )
+    ? buildTemplatedLoanWhatsAppUrl({
+        phone: loan.effectivePhone,
+        templates: whatsAppTemplates,
+        isViaIntermediary: loan.isViaIntermediary,
+        contactName: loan.contact.name,
+        guarantorName: loan.guarantorContact?.name ?? null,
+        amountFormatted: formatCurrency(dueAmountForTemplate),
+        dueDateFormatted: dueDateForTemplate,
+        remainingPrincipalFormatted: formatCurrency(
+          remainingBalanceForTemplate
+        ),
+      })
     : null
 
   function handleConfirmArchive() {

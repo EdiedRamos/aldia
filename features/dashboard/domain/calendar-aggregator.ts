@@ -280,6 +280,8 @@ export function buildMonthlyCalendarData({
       ? contactsById.get(contact.guarantorContactId)
       : undefined
     const contactName = contact?.name ?? 'Contacto eliminado'
+    const isViaIntermediary = !contact?.phone && Boolean(guarantor)
+    const guarantorName = guarantor?.name
     const effectivePhone = contact?.phone ?? guarantor?.phone ?? undefined
 
     if (loan.interestModel === 'OPEN_ENDED') {
@@ -372,6 +374,9 @@ export function buildMonthlyCalendarData({
         referenceId: loan.id,
         contactName,
         ...(effectivePhone ? { phone: effectivePhone } : {}),
+        ...(guarantorName ? { guarantorName } : {}),
+        isViaIntermediary,
+        remainingPrincipal,
       })
 
       continue
@@ -440,6 +445,9 @@ export function buildMonthlyCalendarData({
         referenceId: loan.id,
         contactName,
         ...(effectivePhone ? { phone: effectivePhone } : {}),
+        ...(guarantorName ? { guarantorName } : {}),
+        isViaIntermediary,
+        remainingPrincipal,
       })
     }
   }

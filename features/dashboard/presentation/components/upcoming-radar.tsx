@@ -6,6 +6,7 @@ import {
   ArrowRightIcon,
   BanknoteIcon,
   CheckCircle2Icon,
+  MessageCircleIcon,
   PercentIcon,
   RadarIcon,
   ReceiptTextIcon,
@@ -26,9 +27,14 @@ import {
   diffCalendarDays,
   formatIsoDateDisplay,
 } from '@/features/loans/domain/loan-schedule.calculator'
+import {
+  buildTemplatedLoanWhatsAppUrl,
+  type WhatsAppMessageTemplates,
+} from '@/features/loans/domain/loan-whatsapp-template'
 
 interface UpcomingRadarProps {
   events: CalendarEventItem[]
+  whatsAppTemplates: WhatsAppMessageTemplates
   todayIso: string
   onSelectDate: (isoDate: string) => void
 }
@@ -49,6 +55,7 @@ function getRelativeDayLabel(
 
 export function UpcomingRadar({
   events,
+  whatsAppTemplates,
   todayIso,
   onSelectDate,
 }: UpcomingRadarProps) {
@@ -147,6 +154,41 @@ export function UpcomingRadar({
                       >
                         Servicio
                       </Badge>
+                    )}
+
+                    {!isService && event.phone && (
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        nativeButton={false}
+                        aria-label={`Escribir por WhatsApp a ${event.isViaIntermediary && event.guarantorName ? event.guarantorName : (event.contactName ?? event.title)}`}
+                        render={
+                          <a
+                            href={buildTemplatedLoanWhatsAppUrl({
+                              phone: event.phone,
+                              templates: whatsAppTemplates,
+                              isViaIntermediary: Boolean(
+                                event.isViaIntermediary
+                              ),
+                              contactName: event.contactName ?? event.title,
+                              guarantorName: event.guarantorName ?? null,
+                              amountFormatted: formatCurrency(
+                                event.amount ?? 0
+                              ),
+                              dueDateFormatted: formatIsoDateDisplay(
+                                event.date
+                              ),
+                              remainingPrincipalFormatted: formatCurrency(
+                                event.remainingPrincipal ?? event.amount ?? 0
+                              ),
+                            })}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          />
+                        }
+                      >
+                        <MessageCircleIcon className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                      </Button>
                     )}
 
                     <Button

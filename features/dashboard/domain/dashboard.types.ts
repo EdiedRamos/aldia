@@ -1,5 +1,6 @@
 import type { Contact } from '@/features/contacts/domain/contact.entity'
 import type { Loan } from '@/features/loans/domain/loan.entity'
+import type { WhatsAppMessageTemplates } from '@/features/loans/domain/loan-whatsapp-template'
 import type {
   Service,
   ServicePayment,
@@ -21,6 +22,9 @@ export interface CalendarEventItem {
   referenceId: string
   contactName?: string
   phone?: string
+  guarantorName?: string
+  isViaIntermediary?: boolean
+  remainingPrincipal?: number
 }
 
 export interface DashboardSummary {
@@ -59,4 +63,5 @@ export interface DashboardOverview {
   upcomingEvents: CalendarEventItem[]
   upcoming3DaysCount: number
   sourceData: DashboardSourceData
+  whatsAppTemplates: WhatsAppMessageTemplates
 }

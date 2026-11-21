@@ -12,8 +12,10 @@ import { LoanReceiptPolicyError } from '@/features/loans/domain/loan.policy'
 import type {
   RefinanceLoanInput,
   UpdateInstallmentInput,
+  UpdateWhatsAppTemplatesInput,
   VoidLoanPaymentInput,
 } from '@/features/loans/domain/loan.schemas'
+import type { WhatsAppMessageTemplates } from '@/features/loans/domain/loan-whatsapp-template'
 import { loansContainer } from '@/features/loans/infrastructure/loans.container'
 import { getCurrentUser } from '@/lib/auth'
 
@@ -24,6 +26,10 @@ export type LoanReceiptPreviewActionResult =
 
 export type AttachLoanReceiptActionResult =
   { ok: true; receiptPath: string } | { ok: false; error: string }
+
+export type WhatsAppTemplatesActionResult =
+  | { ok: true; templates: WhatsAppMessageTemplates }
+  | { ok: false; error: string }
 
 async function requireAuthenticatedUser() {
   const user = await getCurrentUser()
@@ -382,6 +388,54 @@ export async function voidLoanPaymentAction(
     return {
       ok: false,
       error: formatActionError(error, 'No se pudo anular el abono.'),
+    }
+  }
+}
+
+export async function getWhatsAppTemplatesAction(): Promise<WhatsAppTemplatesActionResult> {
+  try {
+    const user = await requireAuthenticatedUser()
+    const templates = await loansContainer.getWhatsAppTemplates(user.uid)
+    return { ok: true, templates }
+  } catch (error) {
+    console.error(
+      '[getWhatsAppTemplatesAction] Failed to load WhatsApp templates:',
+      error
+    )
+    return {
+      ok: false,
+      error: formatActionError(
+        error,
+        'No se pudieron cargar las plantillas de WhatsApp.'
+      ),
+    }
+  }
+}
+
+export async function updateWhatsAppTemplatesAction(
+  input: UpdateWhatsAppTemplatesInput
+): Promise<WhatsAppTemplatesActionResult> {
+  try {
+    const user = await requireAuthenticatedUser()
+    const templates = await loansContainer.updateWhatsAppTemplates(
+      user.uid,
+      input
+    )
+
+    revalidatePath('/prestamos')
+    revalidatePath('/')
+    return { ok: true, templates }
+  } catch (error) {
+    console.error(
+      '[updateWhatsAppTemplatesAction] Failed to save WhatsApp templates:',
+      error
+    )
+    return {
+      ok: false,
+      error: formatActionError(
+        error,
+        'No se pudieron guardar las plantillas de WhatsApp.'
+      ),
     }
   }
 }

@@ -4,6 +4,7 @@ import { firestoreContactRepository } from '@/features/contacts/infrastructure/f
 import { getDashboardOverviewUseCase } from '@/features/dashboard/application/get-dashboard-overview.use-case'
 import type { DashboardOverview } from '@/features/dashboard/domain/dashboard.types'
 import { firestoreLoanRepository } from '@/features/loans/infrastructure/firestore-loan.repository'
+import { firestoreLoanSettingsRepository } from '@/features/loans/infrastructure/firestore-loan-settings.repository'
 import { firestoreServiceRepository } from '@/features/services/infrastructure/firestore-service.repository'
 
 export interface GetDashboardOverviewOptions {
@@ -25,6 +26,7 @@ export const dashboardContainer = {
       serviceRepository: firestoreServiceRepository,
       loanRepository: firestoreLoanRepository,
       contactRepository: firestoreContactRepository,
+      loanSettingsRepository: firestoreLoanSettingsRepository,
       month: options.month,
       year: options.year,
       referenceDate: options.referenceDate,
