@@ -87,6 +87,7 @@ export async function createServiceAction(
     await servicesContainer.createService(user.uid, payload)
 
     revalidatePath('/servicios')
+    revalidatePath('/')
     return { ok: true }
   } catch (error) {
     console.error('[createServiceAction] Failed to create service:', error)
@@ -108,6 +109,7 @@ export async function updateServiceAction(
     await servicesContainer.updateService(serviceId, user.uid, payload)
 
     revalidatePath('/servicios')
+    revalidatePath('/')
     return { ok: true }
   } catch (error) {
     console.error('[updateServiceAction] Failed to update service:', error)
@@ -127,6 +129,7 @@ export async function archiveServiceAction(
     await servicesContainer.archiveService(serviceId, user.uid)
 
     revalidatePath('/servicios')
+    revalidatePath('/')
     return { ok: true }
   } catch (error) {
     console.error('[archiveServiceAction] Failed to archive service:', error)
@@ -170,6 +173,7 @@ export async function registerPaymentAction(
     })
 
     revalidatePath('/servicios')
+    revalidatePath('/')
     return { ok: true }
   } catch (error) {
     console.error('[registerPaymentAction] Failed to register payment:', error)

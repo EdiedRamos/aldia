@@ -133,6 +133,7 @@ export async function createLoanAction(
     })
 
     revalidatePath('/prestamos')
+    revalidatePath('/')
     return { ok: true }
   } catch (error) {
     console.error('[createLoanAction] Failed to create loan:', error)
@@ -169,6 +170,7 @@ export async function registerLoanPaymentAction(
     })
 
     revalidatePath('/prestamos')
+    revalidatePath('/')
     return { ok: true }
   } catch (error) {
     console.error(
@@ -191,6 +193,7 @@ export async function updateInstallmentAction(
     await loansContainer.updateInstallment(user.uid, input)
 
     revalidatePath('/prestamos')
+    revalidatePath('/')
     return { ok: true }
   } catch (error) {
     console.error(
@@ -213,6 +216,7 @@ export async function refinanceLoanAction(
     await loansContainer.refinanceLoan(user.uid, input)
 
     revalidatePath('/prestamos')
+    revalidatePath('/')
     return { ok: true }
   } catch (error) {
     console.error('[refinanceLoanAction] Failed to refinance loan:', error)
@@ -232,6 +236,7 @@ export async function archiveLoanAction(
     await loansContainer.archiveLoan(loanId, user.uid)
 
     revalidatePath('/prestamos')
+    revalidatePath('/')
     return { ok: true }
   } catch (error) {
     console.error('[archiveLoanAction] Failed to archive loan:', error)
@@ -293,6 +298,7 @@ export async function attachLoanDisbursementReceiptAction(
     )
 
     revalidatePath('/prestamos')
+    revalidatePath('/')
     return {
       ok: true,
       receiptPath: updatedLoan.disbursementReceiptPath ?? '',
@@ -335,6 +341,7 @@ export async function attachLoanPaymentReceiptAction(
     })
 
     revalidatePath('/prestamos')
+    revalidatePath('/')
     return {
       ok: true,
       receiptPath: result.payment.receiptPath ?? '',
@@ -368,6 +375,7 @@ export async function voidLoanPaymentAction(
     })
 
     revalidatePath('/prestamos')
+    revalidatePath('/')
     return { ok: true }
   } catch (error) {
     console.error('[voidLoanPaymentAction] Failed to void loan payment:', error)
