@@ -23,6 +23,7 @@ import {
   getLoansBoardUseCase,
   type LoansBoard,
 } from '@/features/loans/application/get-loans-board.use-case'
+import { getWhatsAppTemplatesUseCase } from '@/features/loans/application/get-whatsapp-templates.use-case'
 import {
   refinanceLoanUseCase,
   type RefinanceLoanResult,
@@ -33,6 +34,7 @@ import {
   type RegisterLoanPaymentUseCaseInput,
 } from '@/features/loans/application/register-loan-payment.use-case'
 import { updateInstallmentUseCase } from '@/features/loans/application/update-installment.use-case'
+import { updateWhatsAppTemplatesUseCase } from '@/features/loans/application/update-whatsapp-templates.use-case'
 import {
   voidLoanPaymentUseCase,
   type VoidLoanPaymentResult,
@@ -42,9 +44,12 @@ import type { Loan } from '@/features/loans/domain/loan.entity'
 import type {
   RefinanceLoanInput,
   UpdateInstallmentInput,
+  UpdateWhatsAppTemplatesInput,
 } from '@/features/loans/domain/loan.schemas'
+import type { WhatsAppMessageTemplates } from '@/features/loans/domain/loan-whatsapp-template'
 import { firebaseLoanReceiptStorage } from '@/features/loans/infrastructure/firebase-loan-receipt.storage'
 import { firestoreLoanRepository } from '@/features/loans/infrastructure/firestore-loan.repository'
+import { firestoreLoanSettingsRepository } from '@/features/loans/infrastructure/firestore-loan-settings.repository'
 
 /**
  * Composition root for the `loans` feature.
@@ -135,6 +140,21 @@ export const loansContainer = {
   ): Promise<VoidLoanPaymentResult> {
     return voidLoanPaymentUseCase(input, {
       loanRepository: firestoreLoanRepository,
+    })
+  },
+
+  getWhatsAppTemplates(userId: string): Promise<WhatsAppMessageTemplates> {
+    return getWhatsAppTemplatesUseCase(userId, {
+      loanSettingsRepository: firestoreLoanSettingsRepository,
+    })
+  },
+
+  updateWhatsAppTemplates(
+    userId: string,
+    input: UpdateWhatsAppTemplatesInput
+  ): Promise<WhatsAppMessageTemplates> {
+    return updateWhatsAppTemplatesUseCase(userId, input, {
+      loanSettingsRepository: firestoreLoanSettingsRepository,
     })
   },
 }

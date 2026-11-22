@@ -15,12 +15,19 @@ async function LoansBoardLoader() {
     redirect('/login')
   }
 
-  const [board, contacts] = await Promise.all([
+  const [board, contacts, whatsAppTemplates] = await Promise.all([
     loansContainer.getLoansBoard(user.uid),
     contactsContainer.getContacts(user.uid),
+    loansContainer.getWhatsAppTemplates(user.uid),
   ])
 
-  return <LoansBoardView board={board} contacts={contacts} />
+  return (
+    <LoansBoardView
+      board={board}
+      contacts={contacts}
+      whatsAppTemplates={whatsAppTemplates}
+    />
+  )
 }
 
 function LoansBoardSkeleton() {

@@ -184,8 +184,24 @@ export const voidLoanPaymentSchema = z.object({
     .max(500, 'El motivo de anulación no puede superar 500 caracteres.'),
 })
 
+export const whatsAppTemplatesSchema = z.object({
+  directLoanTemplate: z
+    .string()
+    .trim()
+    .min(1, 'La plantilla para préstamo directo no puede estar vacía.')
+    .max(1000, 'La plantilla no puede superar los 1000 caracteres.'),
+  thirdPartyLoanTemplate: z
+    .string()
+    .trim()
+    .min(1, 'La plantilla para préstamo a tercero no puede estar vacía.')
+    .max(1000, 'La plantilla no puede superar los 1000 caracteres.'),
+})
+
 export type CreateLoanInput = z.input<typeof createLoanSchema>
 export type RegisterLoanPaymentInput = z.input<typeof registerLoanPaymentSchema>
 export type UpdateInstallmentInput = z.input<typeof updateInstallmentSchema>
 export type RefinanceLoanInput = z.input<typeof refinanceLoanSchema>
 export type VoidLoanPaymentInput = z.input<typeof voidLoanPaymentSchema>
+export type UpdateWhatsAppTemplatesInput = z.input<
+  typeof whatsAppTemplatesSchema
+>

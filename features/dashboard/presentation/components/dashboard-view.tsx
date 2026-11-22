@@ -17,8 +17,13 @@ interface DashboardViewProps {
 }
 
 export function DashboardView({ overview }: DashboardViewProps) {
-  const { initialCalendar, upcomingEvents, upcoming3DaysCount, sourceData } =
-    overview
+  const {
+    initialCalendar,
+    upcomingEvents,
+    upcoming3DaysCount,
+    sourceData,
+    whatsAppTemplates,
+  } = overview
 
   const [selectedYear, setSelectedYear] = useState(initialCalendar.year)
   const [selectedMonth, setSelectedMonth] = useState(initialCalendar.month)
@@ -105,6 +110,7 @@ export function DashboardView({ overview }: DashboardViewProps) {
 
       <DashboardCalendar
         calendar={currentCalendar}
+        whatsAppTemplates={whatsAppTemplates}
         selectedDate={selectedDate}
         onSelectDate={setSelectedDate}
         onPrevMonth={handlePrevMonth}
@@ -114,6 +120,7 @@ export function DashboardView({ overview }: DashboardViewProps) {
 
       <UpcomingRadar
         events={upcomingEvents}
+        whatsAppTemplates={whatsAppTemplates}
         todayIso={initialCalendar.todayIso}
         onSelectDate={handleJumpToDate}
       />

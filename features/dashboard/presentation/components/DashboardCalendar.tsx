@@ -28,7 +28,6 @@ import {
 } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { formatPeriodLabel } from '@/core/domain/period'
-import { buildWhatsAppUrl } from '@/features/contacts/domain/contact.entity'
 import { buildMonthGridDays } from '@/features/dashboard/domain/calendar-aggregator'
 import type {
   CalendarEventItem,
@@ -40,6 +39,11 @@ import {
   formatCurrency,
   roundCurrency,
 } from '@/features/loans/domain/loan.entity'
+import { formatIsoDateDisplay } from '@/features/loans/domain/loan-schedule.calculator'
+import {
+  buildTemplatedLoanWhatsAppUrl,
+  type WhatsAppMessageTemplates,
+} from '@/features/loans/domain/loan-whatsapp-template'
 
 const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 
@@ -148,6 +152,7 @@ function getEventDotColor(event: CalendarEventItem): string {
 
 interface DashboardCalendarProps {
   calendar: MonthlyCalendarData
+  whatsAppTemplates: WhatsAppMessageTemplates
   selectedDate: string
   onSelectDate: (isoDate: string) => void
   onPrevMonth: () => void
@@ -157,6 +162,7 @@ interface DashboardCalendarProps {
 
 export function DashboardCalendar({
   calendar,
+  whatsAppTemplates,
   selectedDate,
   onSelectDate,
   onPrevMonth,
@@ -534,23 +540,44 @@ export function DashboardCalendar({
                         <ArrowRightIcon className="size-3" />
                       </Button>
 
-                      {event.phone && event.status !== 'PAID' && (
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          nativeButton={false}
-                          aria-label={`Escribir por WhatsApp a ${event.contactName ?? event.title}`}
-                          render={
-                            <a
-                              href={buildWhatsAppUrl(event.phone)}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            />
-                          }
-                        >
-                          <MessageCircleIcon className="size-3.5 text-emerald-600 dark:text-emerald-400" />
-                        </Button>
-                      )}
+                      {event.type !== 'SERVICE_DUE' &&
+                        event.phone &&
+                        event.status !== 'PAID' && (
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            nativeButton={false}
+                            aria-label={`Escribir por WhatsApp a ${event.isViaIntermediary && event.guarantorName ? event.guarantorName : (event.contactName ?? event.title)}`}
+                            render={
+                              <a
+                                href={buildTemplatedLoanWhatsAppUrl({
+                                  phone: event.phone,
+                                  templates: whatsAppTemplates,
+                                  isViaIntermediary: Boolean(
+                                    event.isViaIntermediary
+                                  ),
+                                  contactName: event.contactName ?? event.title,
+                                  guarantorName: event.guarantorName ?? null,
+                                  amountFormatted: formatCurrency(
+                                    event.amount ?? 0
+                                  ),
+                                  dueDateFormatted: formatIsoDateDisplay(
+                                    event.date
+                                  ),
+                                  remainingPrincipalFormatted: formatCurrency(
+                                    event.remainingPrincipal ??
+                                      event.amount ??
+                                      0
+                                  ),
+                                })}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              />
+                            }
+                          >
+                            <MessageCircleIcon className="size-3.5 text-emerald-600 dark:text-emerald-400" />
+                          </Button>
+                        )}
                     </div>
                   </div>
                 )
