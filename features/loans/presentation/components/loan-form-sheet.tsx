@@ -50,10 +50,8 @@ import {
 import { createLoanAction } from '@/features/loans/presentation/actions/loan.actions'
 import { LoanScheduleEditor } from '@/features/loans/presentation/components/loan-schedule-editor'
 import { ReceiptPreviewModal } from '@/features/services/presentation/components/receipt-preview-modal'
-import {
-  compressImageInBrowser,
-  validateClientUploadFile,
-} from '@/lib/utils/image-compression'
+import { validateClientUploadFile } from '@/lib/utils/image-compression'
+import { convertImageFileToWebp } from '@/shared/utils/image-to-webp'
 
 const INTEREST_MODELS: LoanInterestModel[] = [
   'OPEN_ENDED',
@@ -229,7 +227,9 @@ export function LoanFormSheet({
     setIsProcessingFile(true)
 
     try {
-      const processedFile = await compressImageInBrowser(file)
+      const processedFile = await convertImageFileToWebp(file, {
+        maxDimension: 1600,
+      })
       if (processedFile.size > MAX_LOAN_RECEIPT_SIZE_BYTES) {
         event.target.value = ''
         toast.error('El archivo supera el tamaño máximo permitido de 5 MB.')

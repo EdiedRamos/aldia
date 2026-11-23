@@ -33,10 +33,8 @@ import type { EnrichedService } from '@/features/services/application/get-servic
 import { MAX_RECEIPT_SIZE_BYTES } from '@/features/services/domain/receipt.policy'
 import { registerPaymentAction } from '@/features/services/presentation/actions/service.actions'
 import { ReceiptPreviewModal } from '@/features/services/presentation/components/receipt-preview-modal'
-import {
-  compressImageInBrowser,
-  validateClientUploadFile,
-} from '@/lib/utils/image-compression'
+import { validateClientUploadFile } from '@/lib/utils/image-compression'
+import { convertImageFileToWebp } from '@/shared/utils/image-to-webp'
 
 interface UploadReceiptDialogProps {
   open: boolean
@@ -98,7 +96,9 @@ export function UploadReceiptDialog({
     setIsProcessingFile(true)
 
     try {
-      const processedFile = await compressImageInBrowser(file)
+      const processedFile = await convertImageFileToWebp(file, {
+        maxDimension: 1600,
+      })
       if (processedFile.size > MAX_RECEIPT_SIZE_BYTES) {
         event.target.value = ''
         toast.error('El archivo supera el tamaño máximo permitido de 5 MB.')

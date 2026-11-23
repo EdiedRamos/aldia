@@ -30,6 +30,23 @@ interface ReceiptFileInputProps {
   onOpenFullPreview?: () => void
 }
 
+function getFileFormatLabel(file: File): string {
+  const mime = file.type.trim().toLowerCase()
+  if (mime === 'application/pdf') {
+    return 'PDF'
+  }
+  if (mime === 'image/webp') {
+    return 'WEBP'
+  }
+  if (mime === 'image/jpeg' || mime === 'image/jpg') {
+    return 'JPEG'
+  }
+  if (mime === 'image/png') {
+    return 'PNG'
+  }
+  return 'IMAGEN'
+}
+
 export function ReceiptFileInput({
   id,
   file,
@@ -95,7 +112,7 @@ export function ReceiptFileInput({
               <span className="truncate text-xs font-medium">{file.name}</span>
             </div>
             <Badge variant="outline" className="shrink-0 text-[10px]">
-              {isPdf ? 'PDF' : 'JPEG'} · {(file.size / 1024).toFixed(0)} KB
+              {getFileFormatLabel(file)} · {(file.size / 1024).toFixed(0)} KB
             </Badge>
           </div>
 

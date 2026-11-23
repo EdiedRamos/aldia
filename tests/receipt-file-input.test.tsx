@@ -62,6 +62,27 @@ describe('ReceiptFileInput preview URL validation', () => {
     expect(img).not.toBeNull()
     expect(img?.getAttribute('src')).toBe(safeBlobUrl)
     expect(img?.getAttribute('alt')).toBe('Vista previa de comprobante.jpg')
+    expect(container.textContent).toContain('JPEG')
+  })
+
+  it('displays WEBP badge for WebP images', () => {
+    const webpFile = createFile('comprobante.webp', 'image/webp')
+    const safeBlobUrl = `blob:${window.location.origin}/webp-preview-789`
+
+    const { container } = render(
+      <ReceiptFileInput
+        id="receipt-webp"
+        file={webpFile}
+        previewUrl={safeBlobUrl}
+        onFileChange={vi.fn()}
+        onRemove={vi.fn()}
+      />
+    )
+
+    const img = container.querySelector('img')
+    expect(img).not.toBeNull()
+    expect(img?.getAttribute('src')).toBe(safeBlobUrl)
+    expect(container.textContent).toContain('WEBP')
   })
 
   it('renders PdfCanvasViewer for valid https: PDF URLs', () => {

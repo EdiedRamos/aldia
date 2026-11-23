@@ -40,13 +40,13 @@ import {
   updateContactAction,
 } from '@/features/contacts/presentation/actions/contact.actions'
 import {
-  compressImageInBrowser,
   IMAGE_FILE_ACCEPT,
   validateClientUploadFile,
 } from '@/lib/utils/image-compression'
+import { convertImageFileToWebp } from '@/shared/utils/image-to-webp'
 
 const NO_GUARANTOR_VALUE = '__none__'
-const CONTACT_PHOTO_MAX_WIDTH = 512
+const CONTACT_PHOTO_MAX_DIMENSION = 512
 
 interface ContactFormDialogProps {
   open: boolean
@@ -121,9 +121,8 @@ export function ContactFormDialog({
     setIsProcessingPhoto(true)
 
     try {
-      const processedFile = await compressImageInBrowser(file, {
-        maxWidth: CONTACT_PHOTO_MAX_WIDTH,
-        quality: 0.8,
+      const processedFile = await convertImageFileToWebp(file, {
+        maxDimension: CONTACT_PHOTO_MAX_DIMENSION,
       })
 
       if (processedFile.size > MAX_CONTACT_PHOTO_SIZE_BYTES) {
