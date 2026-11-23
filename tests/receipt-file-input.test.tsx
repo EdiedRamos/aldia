@@ -2,6 +2,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render } from '@testing-library/react'
 
+vi.mock('pdfjs-dist/legacy/build/pdf.mjs', () => ({
+  GlobalWorkerOptions: { workerSrc: '' },
+  getDocument: vi.fn(() => ({
+    promise: new Promise(() => {}),
+    destroy: vi.fn(async () => {}),
+  })),
+}))
+
 import { ReceiptFileInput } from '@/components/receipt-file-input'
 
 function createFile(name: string, type: string): File {
@@ -13,7 +21,7 @@ afterEach(() => {
 })
 
 describe('ReceiptFileInput preview URL validation', () => {
-  it('renders an iframe for PDFs with a valid same-origin blob: URL', () => {
+  it('renders PdfCanvasViewer (and no iframe) for PDFs with a valid same-origin blob: URL', () => {
     const pdfFile = createFile('comprobante.pdf', 'application/pdf')
     const safeBlobUrl = `blob:${window.location.origin}/pdf-preview-123`
 
@@ -27,10 +35,11 @@ describe('ReceiptFileInput preview URL validation', () => {
       />
     )
 
-    const iframe = container.querySelector('iframe')
-    expect(iframe).not.toBeNull()
-    expect(iframe?.getAttribute('src')).toBe(safeBlobUrl)
-    expect(iframe?.getAttribute('title')).toBe(
+    expect(container.querySelector('iframe')).toBeNull()
+    const viewer = container.querySelector('[data-slot="pdf-canvas-viewer"]')
+    expect(viewer).not.toBeNull()
+    expect(viewer?.getAttribute('data-pdf-url')).toBe(safeBlobUrl)
+    expect(viewer?.getAttribute('aria-label')).toBe(
       'Vista previa de comprobante.pdf'
     )
   })
@@ -55,7 +64,7 @@ describe('ReceiptFileInput preview URL validation', () => {
     expect(img?.getAttribute('alt')).toBe('Vista previa de comprobante.jpg')
   })
 
-  it('renders previews for valid https: URLs', () => {
+  it('renders PdfCanvasViewer for valid https: PDF URLs', () => {
     const pdfFile = createFile('soporte.pdf', 'application/pdf')
     const httpsUrl = 'https://storage.googleapis.com/bucket/soporte.pdf?sig=1'
 
@@ -69,9 +78,10 @@ describe('ReceiptFileInput preview URL validation', () => {
       />
     )
 
-    const iframe = container.querySelector('iframe')
-    expect(iframe).not.toBeNull()
-    expect(iframe?.getAttribute('src')).toBe(httpsUrl)
+    expect(container.querySelector('iframe')).toBeNull()
+    const viewer = container.querySelector('[data-slot="pdf-canvas-viewer"]')
+    expect(viewer).not.toBeNull()
+    expect(viewer?.getAttribute('data-pdf-url')).toBe(httpsUrl)
   })
 
   it.each([
@@ -81,7 +91,7 @@ describe('ReceiptFileInput preview URL validation', () => {
     ['cross-origin blob: URL', 'blob:https://evil.example.com/1234-5678'],
     ['malformed URL', 'not a valid url'],
   ])(
-    'does not render iframe or img for unsafe previewUrl (%s)',
+    'does not render pdf viewer, iframe, or img for unsafe previewUrl (%s)',
     (_label, unsafeUrl) => {
       const pdfFile = createFile('comprobante.pdf', 'application/pdf')
       const { container: pdfContainer, unmount: unmountPdf } = render(
@@ -95,6 +105,9 @@ describe('ReceiptFileInput preview URL validation', () => {
       )
 
       expect(pdfContainer.querySelector('iframe')).toBeNull()
+      expect(
+        pdfContainer.querySelector('[data-slot="pdf-canvas-viewer"]')
+      ).toBeNull()
       expect(pdfContainer.querySelector('img')).toBeNull()
       expect(pdfContainer.querySelector('label')).not.toBeNull()
       unmountPdf()
