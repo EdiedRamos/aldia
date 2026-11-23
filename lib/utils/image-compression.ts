@@ -1,9 +1,16 @@
-export const MAX_IMAGE_WIDTH = 1600
-export const JPEG_QUALITY = 0.8
-export const HEIC_CONVERSION_QUALITY = 0.85
+import {
+  convertImageFileToWebp,
+  DEFAULT_IMAGE_MAX_DIMENSION,
+  DEFAULT_WEBP_QUALITY,
+  HEIC_CONVERSION_ERROR_MESSAGE,
+  isHeicFile,
+} from '@/shared/utils/image-to-webp'
 
-export const HEIC_CONVERSION_ERROR_MESSAGE =
-  'No se pudo procesar la imagen HEIC. Intenta subirla en formato JPG o PNG.'
+export const MAX_IMAGE_WIDTH = DEFAULT_IMAGE_MAX_DIMENSION
+export const JPEG_QUALITY = DEFAULT_WEBP_QUALITY
+export const HEIC_CONVERSION_QUALITY = DEFAULT_WEBP_QUALITY
+
+export { HEIC_CONVERSION_ERROR_MESSAGE, isHeicFile }
 
 export const IMAGE_FILE_ACCEPT =
   'image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif'
@@ -47,25 +54,6 @@ function getLowerExtension(fileName: string): string {
     return ''
   }
   return parts[parts.length - 1] ?? ''
-}
-
-function toJpgFileName(fileName: string, fallback = 'image'): string {
-  const baseName = fileName.replace(/\.[^/.]+$/, '').trim() || fallback
-  return `${baseName}.jpg`
-}
-
-/**
- * Detects HEIC / HEIF files either by MIME type or by file extension
- * (handles browsers where `.heic` / `.heif` reports an empty `file.type`).
- */
-export function isHeicFile(file: Pick<File, 'type' | 'name'>): boolean {
-  const mime = file.type.trim().toLowerCase()
-  if (mime === 'image/heic' || mime === 'image/heif') {
-    return true
-  }
-
-  const ext = getLowerExtension(file.name)
-  return ext === 'heic' || ext === 'heif'
 }
 
 /**
@@ -114,181 +102,15 @@ export function validateClientUploadFile(
   return { ok: true }
 }
 
-function renderToJpegFile(
-  source: CanvasImageSource,
-  sourceWidth: number,
-  sourceHeight: number,
-  fileName: string,
-  maxWidth: number,
-  quality: number
-): Promise<File | null> {
-  return new Promise<File | null>((resolve) => {
-    let width = sourceWidth
-    let height = sourceHeight
-
-    if (width <= 0 || height <= 0) {
-      resolve(null)
-      return
-    }
-
-    if (width > maxWidth) {
-      height = Math.round((height * maxWidth) / width)
-      width = maxWidth
-    }
-
-    const canvas = document.createElement('canvas')
-    canvas.width = width
-    canvas.height = height
-
-    const context = canvas.getContext('2d')
-    if (!context) {
-      resolve(null)
-      return
-    }
-
-    context.drawImage(source, 0, 0, width, height)
-
-    canvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          resolve(null)
-          return
-        }
-
-        resolve(
-          new File([blob], toJpgFileName(fileName, 'receipt'), {
-            type: 'image/jpeg',
-            lastModified: Date.now(),
-          })
-        )
-      },
-      'image/jpeg',
-      quality
-    )
-  })
-}
-
 /**
- * Attempts to decode an image natively via browser `createImageBitmap` or `<img>`
- * and encode it as a compressed JPEG `File`. Returns `null` if the browser cannot
- * decode the format natively (e.g. HEIC on Chromium/Firefox).
- */
-async function tryDecodeAndCompressNatively(
-  file: File,
-  maxWidth: number,
-  quality: number
-): Promise<File | null> {
-  if (typeof createImageBitmap === 'function') {
-    try {
-      const bitmap = await createImageBitmap(file)
-      try {
-        const rendered = await renderToJpegFile(
-          bitmap,
-          bitmap.width,
-          bitmap.height,
-          file.name,
-          maxWidth,
-          quality
-        )
-        if (rendered) {
-          return rendered
-        }
-      } finally {
-        bitmap.close()
-      }
-    } catch {
-      // Fall through to HTMLImageElement decoding
-    }
-  }
-
-  return new Promise<File | null>((resolve) => {
-    const image = new Image()
-    const objectUrl = URL.createObjectURL(file)
-
-    image.onload = () => {
-      URL.revokeObjectURL(objectUrl)
-      void renderToJpegFile(
-        image,
-        image.naturalWidth || image.width,
-        image.naturalHeight || image.height,
-        file.name,
-        maxWidth,
-        quality
-      ).then(resolve)
-    }
-
-    image.onerror = () => {
-      URL.revokeObjectURL(objectUrl)
-      resolve(null)
-    }
-
-    image.src = objectUrl
-  })
-}
-
-async function convertHeicToJpegFile(file: File): Promise<File> {
-  try {
-    const { heicTo } = await import('heic-to/next')
-    const jpegBlob = await heicTo({
-      blob: file,
-      type: 'image/jpeg',
-      quality: HEIC_CONVERSION_QUALITY,
-    })
-
-    if (!(jpegBlob instanceof Blob) || jpegBlob.size === 0) {
-      throw new Error('heic-to returned an empty blob')
-    }
-
-    return new File([jpegBlob], toJpgFileName(file.name), {
-      type: 'image/jpeg',
-      lastModified: Date.now(),
-    })
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : String(error)
-    console.error('[compressImageInBrowser] HEIC conversion failed:', detail)
-    throw new Error(HEIC_CONVERSION_ERROR_MESSAGE)
-  }
-}
-
-/**
- * Compresses an image file in the browser using HTML `<canvas>` to reduce upload size.
- * Automatically decodes `.heic` / `.heif` images (first trying native browser decoding,
- * then `heic-to/next` WebAssembly with modern `libheif`) to JPEG before resizing.
- * Non-image files (such as PDFs) are returned unchanged.
+ * Legacy wrapper delegating to `convertImageFileToWebp`.
  */
 export async function compressImageInBrowser(
   file: File,
   options: ImageCompressionOptions = {}
 ): Promise<File> {
-  const maxWidth = options.maxWidth ?? MAX_IMAGE_WIDTH
-  const quality = options.quality ?? JPEG_QUALITY
-
-  let workingFile = file
-
-  if (isHeicFile(file)) {
-    // 1. Try native decoding first (handles Safari/macOS and `.heic`-named JPEGs instantly).
-    const nativeDecoded = await tryDecodeAndCompressNatively(
-      file,
-      maxWidth,
-      quality
-    )
-    if (nativeDecoded) {
-      return nativeDecoded
-    }
-
-    // 2. Fall back to `heic-to/next` WebAssembly decoding (supports modern iOS 17/18+ HEIC).
-    workingFile = await convertHeicToJpegFile(file)
-  }
-
-  if (!workingFile.type.startsWith('image/')) {
-    return workingFile
-  }
-
-  const compressed = await tryDecodeAndCompressNatively(
-    workingFile,
-    maxWidth,
-    quality
-  )
-
-  return compressed ?? workingFile
+  return convertImageFileToWebp(file, {
+    maxDimension: options.maxWidth ?? DEFAULT_IMAGE_MAX_DIMENSION,
+    quality: options.quality ?? DEFAULT_WEBP_QUALITY,
+  })
 }

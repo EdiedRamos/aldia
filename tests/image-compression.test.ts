@@ -18,6 +18,7 @@ import {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
   mockHeicTo.mockReset()
 })
 
@@ -100,15 +101,43 @@ describe('lib/utils/image-compression - HEIC detection & client validation', () 
     }
   })
 
-  it('converts HEIC files to JPEG via heic-to/next before canvas compression and throws Spanish error on failure', async () => {
+  it('delegates HEIC files to convertImageFileToWebp (heic-to/next + WebP export) and throws Spanish error on failure', async () => {
     const convertedBlob = new Blob(['fake-jpeg-bytes'], { type: 'image/jpeg' })
     mockHeicTo.mockResolvedValue(convertedBlob)
 
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:mock-url')
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined)
 
-    // Simulate Image triggering onerror in jsdom so compressImageInBrowser falls through to heic-to/next
-    const originalImage = globalThis.Image
+    const originalCreateElement = document.createElement.bind(document)
+    vi.spyOn(document, 'createElement').mockImplementation(((
+      tagName: string
+    ) => {
+      if (tagName.toLowerCase() === 'canvas') {
+        const canvas = originalCreateElement('canvas')
+        vi.spyOn(canvas, 'getContext').mockReturnValue({
+          drawImage: vi.fn(),
+        } as unknown as CanvasRenderingContext2D)
+        canvas.toBlob = ((callback: BlobCallback, type?: string) => {
+          callback(new Blob(['webp-bytes'], { type: type ?? 'image/webp' }))
+        }) as unknown as HTMLCanvasElement['toBlob']
+        return canvas
+      }
+      return originalCreateElement(tagName)
+    }) as typeof document.createElement)
+
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi
+        .fn()
+        .mockRejectedValueOnce(new Error('Native HEIC unsupported'))
+        .mockResolvedValueOnce({
+          width: 1200,
+          height: 800,
+          close: vi.fn(),
+        })
+        .mockRejectedValue(new Error('Native HEIC unsupported'))
+    )
+
     class MockImage {
       onload: (() => void) | null = null
       onerror: (() => void) | null = null
@@ -118,38 +147,34 @@ describe('lib/utils/image-compression - HEIC detection & client validation', () 
         })
       }
     }
-    globalThis.Image = MockImage as unknown as typeof Image
+    vi.stubGlobal('Image', MockImage)
 
-    try {
-      const heicFile = new File(['raw-heic'], 'IMG_9999.HEIC', { type: '' })
-      const result = await compressImageInBrowser(heicFile)
+    const heicFile = new File(['raw-heic'], 'IMG_9999.HEIC', { type: '' })
+    const result = await compressImageInBrowser(heicFile)
 
-      expect(mockHeicTo).toHaveBeenCalledWith({
-        blob: heicFile,
-        type: 'image/jpeg',
-        quality: 0.85,
-      })
-      expect(result.type).toBe('image/jpeg')
-      expect(result.name).toBe('IMG_9999.jpg')
+    expect(mockHeicTo).toHaveBeenCalledWith({
+      blob: heicFile,
+      type: 'image/jpeg',
+      quality: 0.85,
+    })
+    expect(result.type).toBe('image/webp')
+    expect(result.name).toBe('IMG_9999.webp')
 
-      // Conversion failure throws descriptive Spanish message
-      const consoleErrorSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => undefined)
-      mockHeicTo.mockRejectedValue(new Error('WASM decode error'))
-      await expect(compressImageInBrowser(heicFile)).rejects.toThrow(
-        HEIC_CONVERSION_ERROR_MESSAGE
-      )
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        '[compressImageInBrowser] HEIC conversion failed:',
-        'WASM decode error'
-      )
+    // Conversion failure throws descriptive Spanish message
+    const consoleErrorSpy = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => undefined)
+    mockHeicTo.mockRejectedValue(new Error('WASM decode error'))
+    await expect(compressImageInBrowser(heicFile)).rejects.toThrow(
+      HEIC_CONVERSION_ERROR_MESSAGE
+    )
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      '[convertImageFileToWebp] HEIC conversion failed:',
+      'WASM decode error'
+    )
 
-      // PDF passes through untouched
-      const pdfFile = new File(['%PDF'], 'doc.pdf', { type: 'application/pdf' })
-      expect(await compressImageInBrowser(pdfFile)).toBe(pdfFile)
-    } finally {
-      globalThis.Image = originalImage
-    }
+    // PDF passes through untouched
+    const pdfFile = new File(['%PDF'], 'doc.pdf', { type: 'application/pdf' })
+    expect(await compressImageInBrowser(pdfFile)).toBe(pdfFile)
   })
 })

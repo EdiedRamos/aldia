@@ -1,9 +1,9 @@
 export const MAX_CONTACT_PHOTO_SIZE_BYTES = 2 * 1024 * 1024
 
 export const ALLOWED_CONTACT_PHOTO_MIME_TYPES = [
+  'image/webp',
   'image/jpeg',
   'image/png',
-  'image/webp',
 ] as const
 
 export const CONTACT_PHOTO_SIGNED_URL_TTL_SECONDS = 3600
