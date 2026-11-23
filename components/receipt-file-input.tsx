@@ -15,6 +15,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { RECEIPT_FILE_ACCEPT } from '@/lib/utils/image-compression'
 import { parseSafeDownloadUrl } from '@/lib/utils/safe-download'
+import { PdfCanvasViewer } from '@/shared/components/PdfCanvasViewer'
 
 interface ReceiptFileInputProps {
   id: string
@@ -100,10 +101,12 @@ export function ReceiptFileInput({
 
           <div className="overflow-hidden rounded-lg border bg-background">
             {isPdf ? (
-              <iframe
-                src={safePreviewUrl}
+              <PdfCanvasViewer
+                key={safePreviewUrl}
+                url={safePreviewUrl}
                 title={`Vista previa de ${file.name}`}
-                className="h-52 w-full border-0"
+                compact
+                maxPages={1}
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element

@@ -24,6 +24,7 @@ import {
   parseSafeDownloadUrl,
   triggerSafeFileDownload,
 } from '@/lib/utils/safe-download'
+import { PdfCanvasViewer } from '@/shared/components/PdfCanvasViewer'
 
 export interface ReceiptPreviewModalProps {
   open: boolean
@@ -35,6 +36,7 @@ export interface ReceiptPreviewModalProps {
   fileName?: string
   isLoading?: boolean
   errorMessage?: string | null
+  showHeaderDownload?: boolean
 }
 
 /**
@@ -73,11 +75,14 @@ export function ReceiptPreviewModal({
   fileName = 'comprobante',
   isLoading = false,
   errorMessage = null,
+  showHeaderDownload = true,
 }: ReceiptPreviewModalProps) {
   const [isDownloading, setIsDownloading] = useState(false)
   const safeParsedUrl = parseSafeDownloadUrl(previewUrl)
   const safeUrlString = safeParsedUrl ? safeParsedUrl.toString() : null
   const isPdf = isPdfReceipt(fileType, safeUrlString, fileName)
+  const canDownload = Boolean(safeUrlString && !isLoading && !errorMessage)
+  const shouldShowHeaderDownload = isPdf && showHeaderDownload && canDownload
 
   async function handleDownload() {
     if (!previewUrl) {
@@ -121,26 +126,44 @@ export function ReceiptPreviewModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl">
         <DialogHeader>
-          <div className="flex flex-wrap items-center gap-2">
-            <DialogTitle>{title}</DialogTitle>
-            <Badge variant="outline" className="gap-1">
-              {isPdf ? (
-                <>
-                  <FileTextIcon className="size-3" />
-                  <span>PDF</span>
-                </>
-              ) : (
-                <>
-                  <ImageIcon className="size-3" />
-                  <span>Imagen</span>
-                </>
-              )}
-            </Badge>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <DialogTitle className="truncate">{title}</DialogTitle>
+              <Badge variant="outline" className="shrink-0 gap-1">
+                {isPdf ? (
+                  <>
+                    <FileTextIcon className="size-3" />
+                    <span>PDF</span>
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="size-3" />
+                    <span>Imagen</span>
+                  </>
+                )}
+              </Badge>
+            </div>
+
+            {shouldShowHeaderDownload && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleDownload}
+                disabled={isDownloading}
+                className="shrink-0"
+              >
+                <DownloadIcon className="size-3.5" />
+                <span>
+                  {isDownloading ? 'Descargando...' : 'Descargar PDF'}
+                </span>
+              </Button>
+            )}
           </div>
           {subtitle && <DialogDescription>{subtitle}</DialogDescription>}
         </DialogHeader>
 
-        <div className="flex min-h-72 w-full items-center justify-center overflow-hidden rounded-xl border bg-muted/30 p-2">
+        <div className="flex min-h-72 w-full flex-1 items-center justify-center overflow-hidden rounded-xl border bg-muted/30 p-2">
           {isLoading ? (
             <div className="flex flex-col items-center gap-2 py-12 text-muted-foreground">
               <LoaderCircleIcon className="size-7 animate-spin text-primary" />
@@ -157,10 +180,10 @@ export function ReceiptPreviewModal({
             </div>
           ) : safeUrlString ? (
             isPdf ? (
-              <iframe
-                src={safeUrlString}
+              <PdfCanvasViewer
+                key={safeUrlString}
+                url={safeUrlString}
                 title={title}
-                className="h-[68vh] w-full rounded-lg border-0 bg-background"
               />
             ) : (
               // eslint-disable-next-line @next/next/no-img-element
@@ -186,7 +209,7 @@ export function ReceiptPreviewModal({
             Cerrar
           </Button>
 
-          {safeUrlString && !isLoading && !errorMessage && (
+          {canDownload && safeUrlString && (
             <>
               <Button
                 type="button"
@@ -204,14 +227,22 @@ export function ReceiptPreviewModal({
                 <span>Abrir en pestaña</span>
               </Button>
 
-              <Button
-                type="button"
-                onClick={handleDownload}
-                disabled={isDownloading}
-              >
-                <DownloadIcon className="size-3.5" />
-                <span>{isDownloading ? 'Descargando...' : 'Descargar'}</span>
-              </Button>
+              {!shouldShowHeaderDownload && (
+                <Button
+                  type="button"
+                  onClick={handleDownload}
+                  disabled={isDownloading}
+                >
+                  <DownloadIcon className="size-3.5" />
+                  <span>
+                    {isDownloading
+                      ? 'Descargando...'
+                      : isPdf
+                        ? 'Descargar PDF'
+                        : 'Descargar'}
+                  </span>
+                </Button>
+              )}
             </>
           )}
         </DialogFooter>
