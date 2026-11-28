@@ -34,7 +34,10 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { formatPeriodLabel } from '@/core/domain/period'
 import type { EnrichedService } from '@/features/services/application/get-services-board.use-case'
-import type { ServiceStatusBadge } from '@/features/services/domain/service.entity'
+import {
+  getActiveServicePayments,
+  type ServiceStatusBadge,
+} from '@/features/services/domain/service.entity'
 import { archiveServiceAction } from '@/features/services/presentation/actions/service.actions'
 
 interface ServiceCardProps {
@@ -231,7 +234,9 @@ export function ServiceCard({
               onClick={() => onViewHistory(service)}
             >
               <HistoryIcon className="size-3.5" />
-              <span>Recibos ({service.payments.length})</span>
+              <span>
+                Recibos ({getActiveServicePayments(service.payments).length})
+              </span>
             </Button>
           )}
 

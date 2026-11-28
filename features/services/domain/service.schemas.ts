@@ -54,6 +54,17 @@ export const registerPaymentSchema = z.object({
   receiptPath: z.string().trim().min(1).optional(),
 })
 
+export const voidServicePaymentSchema = z.object({
+  serviceId: z.string().trim().min(1, 'El ID del servicio es obligatorio.'),
+  paymentId: z.string().trim().min(1, 'El ID del pago es obligatorio.'),
+  reason: z
+    .string()
+    .trim()
+    .min(3, 'El motivo de anulación debe tener al menos 3 caracteres.')
+    .max(200, 'El motivo de anulación no puede superar 200 caracteres.'),
+})
+
 export type CreateServiceInput = z.infer<typeof createServiceSchema>
 export type UpdateServiceInput = z.infer<typeof updateServiceSchema>
 export type RegisterPaymentInput = z.infer<typeof registerPaymentSchema>
+export type VoidServicePaymentInput = z.input<typeof voidServicePaymentSchema>

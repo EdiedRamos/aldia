@@ -4,9 +4,11 @@ import { revalidatePath } from 'next/cache'
 import { ZodError } from 'zod'
 
 import { ReceiptPolicyError } from '@/features/services/domain/receipt.policy'
+import { ServiceDomainError } from '@/features/services/domain/service.entity'
 import type {
   CreateServiceInput,
   UpdateServiceInput,
+  VoidServicePaymentInput,
 } from '@/features/services/domain/service.schemas'
 import { servicesContainer } from '@/features/services/infrastructure/services.container'
 import { getCurrentUser } from '@/lib/auth'
@@ -28,6 +30,9 @@ function formatActionError(error: unknown, fallbackMessage: string): string {
     return error.issues[0]?.message ?? fallbackMessage
   }
   if (error instanceof ReceiptPolicyError) {
+    return error.userMessage
+  }
+  if (error instanceof ServiceDomainError) {
     return error.userMessage
   }
   if (error instanceof Error && error.message === 'Unauthorized user session') {
@@ -207,6 +212,34 @@ export async function getReceiptPreviewAction(
         error,
         'No se pudo obtener la vista previa del comprobante.'
       ),
+    }
+  }
+}
+
+export async function voidServicePaymentAction(
+  input: VoidServicePaymentInput
+): Promise<ActionResult> {
+  try {
+    const user = await requireAuthenticatedUser()
+
+    await servicesContainer.voidServicePayment({
+      userId: user.uid,
+      serviceId: input.serviceId,
+      paymentId: input.paymentId,
+      reason: input.reason,
+    })
+
+    revalidatePath('/servicios')
+    revalidatePath('/')
+    return { ok: true }
+  } catch (error) {
+    console.error(
+      '[voidServicePaymentAction] Failed to void service payment:',
+      error
+    )
+    return {
+      ok: false,
+      error: formatActionError(error, 'No se pudo anular el pago.'),
     }
   }
 }

@@ -23,12 +23,16 @@ export function ServicesBoardView({ board }: ServicesBoardViewProps) {
   const [editingService, setEditingService] = useState<EnrichedService | null>(
     null
   )
-  const [uploadService, setUploadService] = useState<EnrichedService | null>(
-    null
-  )
-  const [historyService, setHistoryService] = useState<EnrichedService | null>(
-    null
-  )
+  const [uploadServiceId, setUploadServiceId] = useState<string | null>(null)
+  const [historyServiceId, setHistoryServiceId] = useState<string | null>(null)
+
+  const allServices = [...board.active, ...board.archived]
+  const uploadService = uploadServiceId
+    ? (allServices.find((service) => service.id === uploadServiceId) ?? null)
+    : null
+  const historyService = historyServiceId
+    ? (allServices.find((service) => service.id === historyServiceId) ?? null)
+    : null
 
   function handleOpenCreate() {
     setEditingService(null)
@@ -84,8 +88,8 @@ export function ServicesBoardView({ board }: ServicesBoardViewProps) {
                   key={service.id}
                   service={service}
                   onEdit={handleOpenEdit}
-                  onUploadReceipt={(target) => setUploadService(target)}
-                  onViewHistory={(target) => setHistoryService(target)}
+                  onUploadReceipt={(target) => setUploadServiceId(target.id)}
+                  onViewHistory={(target) => setHistoryServiceId(target.id)}
                 />
               ))}
             </div>
@@ -106,8 +110,8 @@ export function ServicesBoardView({ board }: ServicesBoardViewProps) {
                   key={service.id}
                   service={service}
                   onEdit={handleOpenEdit}
-                  onUploadReceipt={(target) => setUploadService(target)}
-                  onViewHistory={(target) => setHistoryService(target)}
+                  onUploadReceipt={(target) => setUploadServiceId(target.id)}
+                  onViewHistory={(target) => setHistoryServiceId(target.id)}
                 />
               ))}
             </div>
@@ -130,7 +134,7 @@ export function ServicesBoardView({ board }: ServicesBoardViewProps) {
           open={Boolean(uploadService)}
           onOpenChange={(open) => {
             if (!open) {
-              setUploadService(null)
+              setUploadServiceId(null)
             }
           }}
           service={uploadService}
@@ -143,7 +147,7 @@ export function ServicesBoardView({ board }: ServicesBoardViewProps) {
           open={Boolean(historyService)}
           onOpenChange={(open) => {
             if (!open) {
-              setHistoryService(null)
+              setHistoryServiceId(null)
             }
           }}
           service={historyService}
