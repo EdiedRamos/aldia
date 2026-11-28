@@ -42,7 +42,9 @@ import { getContactInitials } from '@/features/contacts/domain/contact.entity'
 import type { EnrichedLoan } from '@/features/loans/application/get-loans-board.use-case'
 import {
   formatCurrency,
+  getOpenEndedInterestBreakdown,
   INTEREST_MODEL_LABELS,
+  isOpenEndedWithInterest,
   roundCurrency,
 } from '@/features/loans/domain/loan.entity'
 import { formatIsoDateDisplay } from '@/features/loans/domain/loan-schedule.calculator'
@@ -95,23 +97,25 @@ export function LoanCard({
       )
     : null
 
-  const isOpenEndedWithInterest =
-    loan.interestModel === 'OPEN_ENDED' && loan.interestRate > 0
+  const openEndedWithInterest = isOpenEndedWithInterest(loan)
+  const openEndedBreakdown = openEndedWithInterest
+    ? (loan.openEndedBreakdown ?? getOpenEndedInterestBreakdown(loan))
+    : null
 
-  const openEndedMonthlyInterestDue = isOpenEndedWithInterest
-    ? loan.totals.remainingInterest > 0
-      ? loan.totals.remainingInterest
+  const openEndedMonthlyInterestDue = openEndedBreakdown
+    ? openEndedBreakdown.pendingInterest > 0
+      ? openEndedBreakdown.pendingInterest
       : loan.currentCycleInterestDue
     : null
 
-  const dueAmountForTemplate = isOpenEndedWithInterest
+  const dueAmountForTemplate = openEndedWithInterest
     ? (openEndedMonthlyInterestDue ?? loan.totals.remainingTotal)
     : loan.nextInstallment
       ? (nextInstallmentRemaining ?? loan.totals.remainingTotal)
       : loan.totals.remainingTotal
 
   const dueDateForTemplate =
-    isOpenEndedWithInterest && loan.nextInterestDueDate
+    openEndedWithInterest && loan.nextInterestDueDate
       ? formatIsoDateDisplay(loan.nextInterestDueDate)
       : loan.nextInstallment
         ? formatIsoDateDisplay(loan.nextInstallment.dueDate)
@@ -335,41 +339,85 @@ export function LoanCard({
               )}
             </div>
 
-            {/* Balances & progress bar */}
-            <div className="flex flex-col gap-1.5 rounded-xl border bg-muted/20 p-3">
+            {/* Balances & progress bar (or open-ended interest breakdown) */}
+            <div className="flex flex-col gap-2 rounded-xl border bg-muted/20 p-3">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="text-xs text-muted-foreground">
-                  Saldo pendiente
+                  {openEndedBreakdown
+                    ? 'Saldo pendiente total'
+                    : 'Saldo pendiente'}
                 </span>
                 <span className="text-lg font-semibold tabular-nums">
                   {formatCurrency(loan.totals.remainingTotal)}
                 </span>
               </div>
 
-              <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                <div
-                  className={`h-full rounded-full transition-all ${
-                    loan.effectiveStatus === 'OVERDUE'
-                      ? 'bg-destructive'
-                      : 'bg-emerald-500'
-                  }`}
-                  style={{ width: `${loan.totals.progressPercent}%` }}
-                />
-              </div>
+              {openEndedBreakdown ? (
+                <dl className="grid grid-cols-1 gap-1.5 border-t border-border/60 pt-2 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">Capital vivo</dt>
+                    <dd className="font-medium text-foreground tabular-nums">
+                      {formatCurrency(openEndedBreakdown.capitalAlive)}
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">
+                      Intereses pendientes
+                    </dt>
+                    <dd
+                      className={`font-medium tabular-nums ${
+                        openEndedBreakdown.pendingInterest > 0
+                          ? loan.isOverdue
+                            ? 'text-destructive'
+                            : 'text-amber-700 dark:text-amber-400'
+                          : 'text-muted-foreground'
+                      }`}
+                    >
+                      {formatCurrency(openEndedBreakdown.pendingInterest)}
+                    </dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <dt className="text-muted-foreground">Ganancia cobrada</dt>
+                    <dd className="font-medium text-emerald-600 tabular-nums dark:text-emerald-400">
+                      {formatCurrency(openEndedBreakdown.collectedInterest)}
+                    </dd>
+                  </div>
+                </dl>
+              ) : (
+                <>
+                  <div
+                    role="progressbar"
+                    aria-label="Progreso de recuperación del préstamo"
+                    aria-valuenow={loan.totals.progressPercent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    className="h-2 w-full overflow-hidden rounded-full bg-muted"
+                  >
+                    <div
+                      className={`h-full rounded-full transition-all ${
+                        loan.effectiveStatus === 'OVERDUE'
+                          ? 'bg-destructive'
+                          : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${loan.totals.progressPercent}%` }}
+                    />
+                  </div>
 
-              <div className="flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
-                <span>
-                  Recuperado: {formatCurrency(loan.totals.totalPaid)} (
-                  {loan.totals.progressPercent}%)
-                </span>
-                <span>Total: {formatCurrency(loan.totals.totalDue)}</span>
-              </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground tabular-nums">
+                    <span>
+                      Recuperado: {formatCurrency(loan.totals.totalPaid)} (
+                      {loan.totals.progressPercent}%)
+                    </span>
+                    <span>Total: {formatCurrency(loan.totals.totalDue)}</span>
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Next installment or Open-ended strip */}
             {loan.status === 'ACTIVE' &&
               (loan.interestModel === 'OPEN_ENDED' ? (
-                isOpenEndedWithInterest ? (
+                openEndedWithInterest ? (
                   <div
                     className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs ${
                       loan.isOverdue
