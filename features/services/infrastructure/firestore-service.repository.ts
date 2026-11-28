@@ -5,15 +5,18 @@ import {
   type DocumentData,
 } from 'firebase-admin/firestore'
 
-import type {
-  Service,
-  ServicePayment,
-  ServiceStatus,
+import {
+  ServiceDomainError,
+  type Service,
+  type ServicePayment,
+  type ServicePaymentStatus,
+  type ServiceStatus,
 } from '@/features/services/domain/service.entity'
 import type {
   CreateServiceData,
   IServiceRepository,
   UpdateServiceData,
+  VoidServicePaymentData,
 } from '@/features/services/domain/service.repository'
 import { getAdminDb } from '@/lib/firebase-admin'
 
@@ -54,6 +57,9 @@ function mapDocToServicePayment(
   id: string,
   data: DocumentData
 ): ServicePayment {
+  const status: ServicePaymentStatus =
+    data.status === 'VOIDED' ? 'VOIDED' : 'ACTIVE'
+
   return {
     id,
     userId: String(data.userId ?? ''),
@@ -63,6 +69,9 @@ function mapDocToServicePayment(
     receiptUrl: String(data.receiptUrl ?? ''),
     receiptType: String(data.receiptType ?? 'IMAGE'),
     receiptPath: String(data.receiptPath ?? ''),
+    status,
+    voidedAt: data.voidedAt ? toIsoDateString(data.voidedAt) : null,
+    voidReason: typeof data.voidReason === 'string' ? data.voidReason : null,
   }
 }
 
@@ -198,7 +207,7 @@ export class FirestoreServiceRepository implements IServiceRepository {
     const batch = db.batch()
 
     for (const payment of payments) {
-      const docId = `${payment.serviceId}_${payment.period}`
+      const docId = payment.id || `${payment.serviceId}_${payment.period}`
       const docRef = db.collection(SERVICE_PAYMENTS_COLLECTION).doc(docId)
 
       batch.set(docRef, {
@@ -212,10 +221,111 @@ export class FirestoreServiceRepository implements IServiceRepository {
         receiptUrl: payment.receiptUrl,
         receiptType: payment.receiptType,
         receiptPath: payment.receiptPath,
+        status: payment.status === 'VOIDED' ? 'VOIDED' : 'ACTIVE',
+        voidedAt: payment.voidedAt
+          ? payment.voidedAt instanceof Date
+            ? Timestamp.fromDate(payment.voidedAt)
+            : Timestamp.fromDate(new Date(payment.voidedAt))
+          : null,
+        voidReason: payment.voidReason ?? null,
       })
     }
 
     await batch.commit()
+  }
+
+  async voidPayment(data: VoidServicePaymentData): Promise<ServicePayment> {
+    const db = getAdminDb()
+    const serviceRef = db.collection(SERVICES_COLLECTION).doc(data.serviceId)
+    const paymentRef = db
+      .collection(SERVICE_PAYMENTS_COLLECTION)
+      .doc(data.paymentId)
+
+    return db.runTransaction(async (tx) => {
+      const [serviceSnap, paymentSnap] = await Promise.all([
+        tx.get(serviceRef),
+        tx.get(paymentRef),
+      ])
+
+      if (!serviceSnap.exists) {
+        throw new ServiceDomainError(
+          'SERVICE_NOT_FOUND',
+          `Service ${data.serviceId} not found`,
+          'El servicio no existe o no tienes acceso a él.'
+        )
+      }
+
+      const serviceData = serviceSnap.data()
+      if (!serviceData || serviceData.userId !== data.userId) {
+        throw new ServiceDomainError(
+          'SERVICE_NOT_FOUND',
+          `Service ${data.serviceId} does not belong to user ${data.userId}`,
+          'El servicio no existe o no tienes acceso a él.'
+        )
+      }
+
+      if (serviceData.status === 'ARCHIVED') {
+        throw new ServiceDomainError(
+          'SERVICE_ARCHIVED',
+          `Cannot void payment on archived service ${data.serviceId}`,
+          'No se pueden anular pagos en servicios archivados.'
+        )
+      }
+
+      if (!paymentSnap.exists) {
+        throw new ServiceDomainError(
+          'PAYMENT_NOT_FOUND',
+          `Payment ${data.paymentId} not found`,
+          'No se encontró el pago especificado en este servicio.'
+        )
+      }
+
+      const paymentData = paymentSnap.data()
+      if (
+        !paymentData ||
+        paymentData.userId !== data.userId ||
+        paymentData.serviceId !== data.serviceId
+      ) {
+        throw new ServiceDomainError(
+          'PAYMENT_NOT_FOUND',
+          `Payment ${data.paymentId} does not belong to service ${data.serviceId} and user ${data.userId}`,
+          'No se encontró el pago especificado en este servicio.'
+        )
+      }
+
+      if (paymentData.status === 'VOIDED') {
+        throw new ServiceDomainError(
+          'PAYMENT_ALREADY_VOIDED',
+          `Payment ${data.paymentId} is already voided`,
+          'Este pago ya fue anulado anteriormente.'
+        )
+      }
+
+      const voidedDate = new Date(data.voidedAt)
+      const voidedTimestamp = Number.isNaN(voidedDate.getTime())
+        ? FieldValue.serverTimestamp()
+        : Timestamp.fromDate(voidedDate)
+
+      tx.update(paymentRef, {
+        status: 'VOIDED',
+        voidedAt: voidedTimestamp,
+        voidReason: data.voidReason,
+      })
+
+      tx.update(serviceRef, {
+        nextPendingPeriod: data.nextPendingPeriod,
+        coveredUntilPeriod: data.coveredUntilPeriod,
+        updatedAt: FieldValue.serverTimestamp(),
+      })
+
+      const mapped = mapDocToServicePayment(paymentSnap.id, paymentData)
+      return {
+        ...mapped,
+        status: 'VOIDED',
+        voidedAt: data.voidedAt,
+        voidReason: data.voidReason,
+      }
+    })
   }
 }
 

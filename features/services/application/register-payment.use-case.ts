@@ -3,7 +3,10 @@ import {
   ReceiptPolicyError,
   validateReceiptFile,
 } from '@/features/services/domain/receipt.policy'
-import type { ServicePayment } from '@/features/services/domain/service.entity'
+import {
+  isActiveServicePayment,
+  type ServicePayment,
+} from '@/features/services/domain/service.entity'
 import type {
   IReceiptStorage,
   IServiceRepository,
@@ -63,13 +66,16 @@ export async function registerPaymentUseCase(
   const existingPayments = await serviceRepository.findPaymentsByUserId(
     input.userId
   )
-  const paidPeriodsForService = new Set(
-    existingPayments
-      .filter((payment) => payment.serviceId === validated.serviceId)
+  const paymentsForService = existingPayments.filter(
+    (payment) => payment.serviceId === validated.serviceId
+  )
+  const activePaidPeriodsForService = new Set(
+    paymentsForService
+      .filter((payment) => isActiveServicePayment(payment))
       .map((payment) => payment.period)
   )
   const conflictingPeriod = periods.find((period) =>
-    paidPeriodsForService.has(period)
+    activePaidPeriodsForService.has(period)
   )
   if (conflictingPeriod) {
     throw new ReceiptPolicyError(
@@ -79,27 +85,56 @@ export async function registerPaymentUseCase(
     )
   }
 
-  const { receiptUrl, receiptPath } = await receiptStorage.uploadReceipt({
+  const existingIds = new Set(paymentsForService.map((payment) => payment.id))
+  const priorPaymentsForStartPeriod = paymentsForService.filter(
+    (payment) => payment.period === validated.startPeriod
+  ).length
+
+  const uploadParams = {
     userId: input.userId,
     serviceId: validated.serviceId,
     period: validated.startPeriod,
     buffer: input.buffer,
     contentType: validatedFile.contentType,
     extension: validatedFile.extension,
-  })
+    ...(priorPaymentsForStartPeriod > 0
+      ? {
+          fileKey: `${validated.startPeriod}_v${priorPaymentsForStartPeriod + 1}`,
+        }
+      : {}),
+  }
+
+  const { receiptUrl, receiptPath } =
+    await receiptStorage.uploadReceipt(uploadParams)
 
   const paidAt = new Date().toISOString()
 
-  const payments: ServicePayment[] = periods.map((period) => ({
-    id: `${validated.serviceId}_${period}`,
-    userId: input.userId,
-    serviceId: validated.serviceId,
-    period,
-    paidAt,
-    receiptUrl,
-    receiptType: validatedFile.receiptType,
-    receiptPath,
-  }))
+  const payments: ServicePayment[] = periods.map((period) => {
+    const baseId = `${validated.serviceId}_${period}`
+    let paymentId = baseId
+    if (existingIds.has(paymentId)) {
+      let version = 2
+      while (existingIds.has(`${baseId}_v${version}`)) {
+        version += 1
+      }
+      paymentId = `${baseId}_v${version}`
+    }
+    existingIds.add(paymentId)
+
+    return {
+      id: paymentId,
+      userId: input.userId,
+      serviceId: validated.serviceId,
+      period,
+      paidAt,
+      receiptUrl,
+      receiptType: validatedFile.receiptType,
+      receiptPath,
+      status: 'ACTIVE',
+      voidedAt: null,
+      voidReason: null,
+    }
+  })
 
   await serviceRepository.savePayments(payments)
 

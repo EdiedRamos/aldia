@@ -23,12 +23,14 @@ export class FirebaseReceiptStorage implements IReceiptStorage {
     userId,
     serviceId,
     period,
+    fileKey,
     buffer,
     contentType,
     extension,
   }: UploadReceiptParams): Promise<UploadedReceiptResult> {
     const cleanExtension = extension.replace(/^\./, '').toLowerCase() || 'bin'
-    const receiptPath = `receipts/${userId}/${serviceId}/${period}.${cleanExtension}`
+    const fileStem = fileKey?.trim() || period
+    const receiptPath = `receipts/${userId}/${serviceId}/${fileStem}.${cleanExtension}`
     const bucket = this.getBucket()
     const file = bucket.file(receiptPath)
 

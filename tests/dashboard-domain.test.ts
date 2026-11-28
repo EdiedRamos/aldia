@@ -204,6 +204,118 @@ describe('Dashboard calendar aggregator (domain)', () => {
       expect(febResult.events[0]?.date).toBe('2026-02-28')
       expect(buildClampedIsoDate(2024, 2, 31)).toBe('2024-02-29')
     })
+
+    it('strictly excludes VOIDED service payments from Dashboard KPIs, calendar status, and 7-day radar while keeping legacy status-less payments active', () => {
+      const services: Service[] = [
+        makeService({
+          id: 'svc-voided-pending',
+          name: 'Energía',
+          billingDay: 20,
+          startPeriod: '2026-01',
+        }),
+        makeService({
+          id: 'svc-voided-overdue',
+          name: 'Agua',
+          billingDay: 10,
+          startPeriod: '2026-01',
+        }),
+        makeService({
+          id: 'svc-repaid',
+          name: 'Internet',
+          billingDay: 12,
+          startPeriod: '2026-01',
+        }),
+        makeService({
+          id: 'svc-legacy',
+          name: 'Gas',
+          billingDay: 8,
+          startPeriod: '2026-01',
+        }),
+      ]
+
+      const legacyPayment = makeServicePayment({
+        id: 'pay-legacy',
+        serviceId: 'svc-legacy',
+        period: '2026-11',
+      })
+      delete legacyPayment.status
+
+      const payments: ServicePayment[] = [
+        makeServicePayment({
+          id: 'pay-void-1',
+          serviceId: 'svc-voided-pending',
+          period: '2026-11',
+          status: 'VOIDED',
+          voidedAt: '2026-11-14T10:00:00.000Z',
+          voidReason: 'Recibo incorrecto',
+        }),
+        makeServicePayment({
+          id: 'pay-void-2',
+          serviceId: 'svc-voided-overdue',
+          period: '2026-11',
+          status: 'VOIDED',
+          voidedAt: '2026-11-11T10:00:00.000Z',
+          voidReason: 'Duplicado',
+        }),
+        makeServicePayment({
+          id: 'pay-repaid-void',
+          serviceId: 'svc-repaid',
+          period: '2026-11',
+          status: 'VOIDED',
+          voidedAt: '2026-11-10T10:00:00.000Z',
+          voidReason: 'Imagen borrosa',
+        }),
+        makeServicePayment({
+          id: 'pay-repaid-active',
+          serviceId: 'svc-repaid',
+          period: '2026-11',
+          status: 'ACTIVE',
+        }),
+        legacyPayment,
+      ]
+
+      const monthly = buildMonthlyCalendarData({
+        month: 11,
+        year: 2026,
+        services,
+        servicePayments: payments,
+        loans: [],
+        contacts: [],
+        referenceDate: '2026-11-15',
+      })
+
+      expect(
+        monthly.events.find((e) => e.referenceId === 'svc-voided-pending')
+          ?.status
+      ).toBe('PENDING')
+      expect(
+        monthly.events.find((e) => e.referenceId === 'svc-voided-overdue')
+          ?.status
+      ).toBe('OVERDUE')
+      expect(
+        monthly.events.find((e) => e.referenceId === 'svc-repaid')?.status
+      ).toBe('PAID')
+      expect(
+        monthly.events.find((e) => e.referenceId === 'svc-legacy')?.status
+      ).toBe('PAID')
+
+      expect(monthly.summary.servicesTotalDue).toBe(4)
+      expect(monthly.summary.servicesPaid).toBe(2) // only svc-repaid + svc-legacy
+      expect(monthly.summary.overdueCount).toBe(1) // svc-voided-overdue
+
+      // svc-voided-pending (Nov 20) reappears in the 7-day radar from Nov 15
+      const radar = buildUpcomingEventsRadar({
+        services,
+        servicePayments: payments,
+        loans: [],
+        contacts: [],
+        referenceDate: '2026-11-15',
+        days: 7,
+      })
+      expect(radar.upcomingEvents.map((e) => e.referenceId)).toEqual([
+        'svc-voided-pending',
+      ])
+    })
   })
 
   describe('scheduled loans projection', () => {

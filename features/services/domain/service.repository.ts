@@ -23,6 +23,16 @@ export interface UpdateServiceData {
   status?: ServiceStatus
 }
 
+export interface VoidServicePaymentData {
+  userId: string
+  serviceId: string
+  paymentId: string
+  voidedAt: string
+  voidReason: string
+  nextPendingPeriod: string
+  coveredUntilPeriod: string | null
+}
+
 export interface IServiceRepository {
   findByUserId(userId: string): Promise<Service[]>
   findPaymentsByUserId(userId: string): Promise<ServicePayment[]>
@@ -34,12 +44,14 @@ export interface IServiceRepository {
     data: UpdateServiceData
   ): Promise<Service>
   savePayments(payments: ServicePayment[]): Promise<void>
+  voidPayment(data: VoidServicePaymentData): Promise<ServicePayment>
 }
 
 export interface UploadReceiptParams {
   userId: string
   serviceId: string
   period: string
+  fileKey?: string
   buffer: Buffer
   contentType: string
   extension: string
