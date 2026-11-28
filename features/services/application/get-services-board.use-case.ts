@@ -1,6 +1,7 @@
 import { comparePeriods } from '@/core/domain/period'
 import {
   evaluateServiceStatus,
+  getServicePaymentStatus,
   type EvaluatedServiceStatus,
   type Service,
   type ServicePayment,
@@ -51,7 +52,20 @@ export async function getServicesBoardUseCase(
   const enriched: EnrichedService[] = services.map((service) => {
     const servicePayments = (paymentsByServiceId.get(service.id) ?? [])
       .slice()
-      .sort((a, b) => comparePeriods(b.period, a.period))
+      .sort((a, b) => {
+        const periodDiff = comparePeriods(b.period, a.period)
+        if (periodDiff !== 0) {
+          return periodDiff
+        }
+
+        const aVoided = getServicePaymentStatus(a) === 'VOIDED' ? 1 : 0
+        const bVoided = getServicePaymentStatus(b) === 'VOIDED' ? 1 : 0
+        if (aVoided !== bVoided) {
+          return aVoided - bVoided
+        }
+
+        return String(b.paidAt).localeCompare(String(a.paidAt))
+      })
 
     const evaluated = evaluateServiceStatus(
       service,

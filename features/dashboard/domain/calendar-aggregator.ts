@@ -27,9 +27,10 @@ import {
   parseIsoDateToUtcMs,
 } from '@/features/loans/domain/loan-schedule.calculator'
 import { resolveReferenceCode } from '@/features/services/domain/reference-code'
-import type {
-  Service,
-  ServicePayment,
+import {
+  isActiveServicePayment,
+  type Service,
+  type ServicePayment,
 } from '@/features/services/domain/service.entity'
 
 const BALANCE_EPSILON = 0.01
@@ -206,6 +207,9 @@ export function buildMonthlyCalendarData({
 
   const paidServiceKeys = new Set<string>()
   for (const payment of servicePayments) {
+    if (!isActiveServicePayment(payment)) {
+      continue
+    }
     paidServiceKeys.add(`${payment.serviceId}::${payment.period}`)
   }
 

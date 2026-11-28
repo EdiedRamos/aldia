@@ -15,6 +15,11 @@ import {
   type RegisterPaymentUseCaseInput,
 } from '@/features/services/application/register-payment.use-case'
 import { updateServiceUseCase } from '@/features/services/application/update-service.use-case'
+import {
+  voidServicePaymentUseCase,
+  type VoidServicePaymentResult,
+  type VoidServicePaymentUseCaseInput,
+} from '@/features/services/application/void-service-payment.use-case'
 import type {
   Service,
   ServicePayment,
@@ -78,6 +83,14 @@ export const servicesContainer = {
   getReceiptPreview(input: GetReceiptPreviewInput): Promise<string> {
     return getReceiptPreviewUseCase(input, {
       receiptStorage: firebaseReceiptStorage,
+    })
+  },
+
+  voidServicePayment(
+    input: VoidServicePaymentUseCaseInput
+  ): Promise<VoidServicePaymentResult> {
+    return voidServicePaymentUseCase(input, {
+      serviceRepository: firestoreServiceRepository,
     })
   },
 }

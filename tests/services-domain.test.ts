@@ -17,6 +17,13 @@ import {
 import { resolveReferenceCode } from '@/features/services/domain/reference-code'
 import {
   evaluateServiceStatus,
+  getActiveServicePayments,
+  getLatestActiveServicePayment,
+  getServicePaymentStatus,
+  isActiveServicePayment,
+  isPaymentEligibleForVoid,
+  ServiceDomainError,
+  voidPaymentOnService,
   type Service,
   type ServicePayment,
 } from '@/features/services/domain/service.entity'
@@ -24,6 +31,7 @@ import {
   createServiceSchema,
   registerPaymentSchema,
   updateServiceSchema,
+  voidServicePaymentSchema,
 } from '@/features/services/domain/service.schemas'
 
 function makeService(overrides: Partial<Service> = {}): Service {
@@ -207,6 +215,308 @@ describe('features/services/domain/service.entity - evaluateServiceStatus', () =
       resolvedReferenceCode: '2610987654',
     })
   })
+
+  it('treats legacy payments without status as ACTIVE and ignores VOIDED payments', () => {
+    const legacyPayment = makePayment('2026-10')
+    delete legacyPayment.status
+
+    const voidedPayment = makePayment('2026-11', {
+      status: 'VOIDED',
+      voidedAt: '2026-11-12T10:00:00.000Z',
+      voidReason: 'Comprobante incorrecto',
+    })
+
+    expect(getServicePaymentStatus(legacyPayment)).toBe('ACTIVE')
+    expect(isActiveServicePayment(legacyPayment)).toBe(true)
+    expect(getServicePaymentStatus(voidedPayment)).toBe('VOIDED')
+    expect(isActiveServicePayment(voidedPayment)).toBe(false)
+    expect(getActiveServicePayments([legacyPayment, voidedPayment])).toEqual([
+      legacyPayment,
+    ])
+
+    const service = makeService({
+      startPeriod: '2026-10',
+      billingDay: 20,
+      referenceCode: '{YY}{MM}987654',
+    })
+
+    const evaluated = evaluateServiceStatus(
+      service,
+      [legacyPayment, voidedPayment],
+      new Date(2026, 10, 15) // 2026-11-15 <= 20
+    )
+
+    expect(evaluated).toEqual({
+      statusBadge: 'PENDING',
+      nextPendingPeriod: '2026-11',
+      coveredUntilPeriod: '2026-10',
+      resolvedReferenceCode: '2611987654',
+    })
+  })
+})
+
+describe('features/services/domain/service.entity - voidPaymentOnService', () => {
+  it('reverts a single-payment service back to PENDING (or OVERDUE after billingDay) while preserving receipt metadata', () => {
+    const service = makeService({
+      startPeriod: '2026-11',
+      billingDay: 15,
+      referenceCode: 'REF-{YYYY}-{MM}',
+    })
+    const singlePayment = makePayment('2026-11', {
+      id: 'srv-1_2026-11',
+      receiptPath: 'receipts/user-1/srv-1/2026-11.webp',
+    })
+
+    const beforeVoid = evaluateServiceStatus(
+      service,
+      [singlePayment],
+      new Date(2026, 10, 10)
+    )
+    expect(beforeVoid.statusBadge).toBe('UP_TO_DATE')
+    expect(beforeVoid.nextPendingPeriod).toBe('2026-12')
+
+    // On or before billingDay -> reverts to PENDING
+    const pendingResult = voidPaymentOnService(
+      service,
+      [singlePayment],
+      'srv-1_2026-11',
+      'Se subió recibo de otro mes',
+      '2026-11-10T15:00:00.000Z',
+      new Date(2026, 10, 10)
+    )
+
+    expect(pendingResult.voidedPayment).toMatchObject({
+      id: 'srv-1_2026-11',
+      status: 'VOIDED',
+      voidedAt: '2026-11-10T15:00:00.000Z',
+      voidReason: 'Se subió recibo de otro mes',
+      receiptPath: 'receipts/user-1/srv-1/2026-11.webp',
+      receiptUrl: singlePayment.receiptUrl,
+    })
+    expect(pendingResult.activePaymentsCount).toBe(0)
+    expect(pendingResult.evaluatedStatus).toEqual({
+      statusBadge: 'PENDING',
+      nextPendingPeriod: '2026-11',
+      coveredUntilPeriod: null,
+      resolvedReferenceCode: 'REF-2026-11',
+    })
+
+    // After billingDay -> reverts to OVERDUE
+    const overdueResult = voidPaymentOnService(
+      service,
+      [singlePayment],
+      'srv-1_2026-11',
+      'Se subió recibo de otro mes',
+      '2026-11-20T15:00:00.000Z',
+      new Date(2026, 10, 20)
+    )
+    expect(overdueResult.evaluatedStatus.statusBadge).toBe('OVERDUE')
+    expect(overdueResult.evaluatedStatus.nextPendingPeriod).toBe('2026-11')
+  })
+
+  it('reverts a recurring service to the previous billing cycle when voiding its latest active payment', () => {
+    const service = makeService({
+      startPeriod: '2026-09',
+      billingDay: 20,
+      referenceCode: '{YY}{MM}987654',
+    })
+    const payments = [
+      makePayment('2026-09', { id: 'srv-1_2026-09', status: 'ACTIVE' }),
+      makePayment('2026-10', { id: 'srv-1_2026-10', status: 'ACTIVE' }),
+      makePayment('2026-11', { id: 'srv-1_2026-11', status: 'ACTIVE' }),
+    ]
+
+    const beforeVoid = evaluateServiceStatus(
+      service,
+      payments,
+      new Date(2026, 10, 15)
+    )
+    expect(beforeVoid).toEqual({
+      statusBadge: 'UP_TO_DATE',
+      nextPendingPeriod: '2026-12',
+      coveredUntilPeriod: '2026-11',
+      resolvedReferenceCode: '2612987654',
+    })
+
+    const result = voidPaymentOnService(
+      service,
+      payments,
+      'srv-1_2026-11',
+      'Pago duplicado',
+      '2026-11-15T12:00:00.000Z',
+      new Date(2026, 10, 15)
+    )
+
+    expect(result.activePaymentsCount).toBe(2)
+    expect(result.evaluatedStatus).toEqual({
+      statusBadge: 'PENDING',
+      nextPendingPeriod: '2026-11',
+      coveredUntilPeriod: '2026-10',
+      resolvedReferenceCode: '2611987654',
+    })
+  })
+
+  it('reverts nextPendingPeriod while remaining UP_TO_DATE when voiding an advance future cycle', () => {
+    const service = makeService({
+      startPeriod: '2026-11',
+      billingDay: 15,
+    })
+    const payments = [
+      makePayment('2026-11', { id: 'srv-1_2026-11', status: 'ACTIVE' }),
+      makePayment('2026-12', { id: 'srv-1_2026-12', status: 'ACTIVE' }),
+    ]
+
+    const result = voidPaymentOnService(
+      service,
+      payments,
+      'srv-1_2026-12',
+      'Solo se pagó noviembre',
+      '2026-11-10T10:00:00.000Z',
+      new Date(2026, 10, 10)
+    )
+
+    expect(result.evaluatedStatus).toEqual({
+      statusBadge: 'UP_TO_DATE',
+      nextPendingPeriod: '2026-12',
+      coveredUntilPeriod: '2026-11',
+      resolvedReferenceCode: '2612987654',
+    })
+  })
+
+  it('rejects double voiding, unknown payments, and archived services', () => {
+    const activeService = makeService()
+    const archivedService = makeService({ status: 'ARCHIVED' })
+    const alreadyVoided = makePayment('2026-10', {
+      id: 'srv-1_2026-10',
+      status: 'VOIDED',
+      voidReason: 'Anulado previamente',
+    })
+
+    expect(() =>
+      voidPaymentOnService(
+        archivedService,
+        [makePayment('2026-10', { id: 'srv-1_2026-10' })],
+        'srv-1_2026-10',
+        'Motivo válido',
+        '2026-11-01T00:00:00.000Z'
+      )
+    ).toThrow(ServiceDomainError)
+
+    expect(() =>
+      voidPaymentOnService(
+        activeService,
+        [alreadyVoided],
+        'srv-1_2026-10',
+        'Segundo intento',
+        '2026-11-01T00:00:00.000Z'
+      )
+    ).toThrow(/already voided/i)
+
+    expect(() =>
+      voidPaymentOnService(
+        activeService,
+        [makePayment('2026-10', { id: 'other-id', serviceId: 'srv-other' })],
+        'other-id',
+        'Motivo válido',
+        '2026-11-01T00:00:00.000Z'
+      )
+    ).toThrow(/not found/i)
+  })
+
+  it('allows voiding ONLY the chronologically latest ACTIVE payment and rejects earlier active payments', () => {
+    const service = makeService({
+      startPeriod: '2026-09',
+      billingDay: 20,
+    })
+    const archivedService = makeService({ status: 'ARCHIVED' })
+
+    const sep = makePayment('2026-09', {
+      id: 'srv-1_2026-09',
+      status: 'ACTIVE',
+    })
+    const oct = makePayment('2026-10', {
+      id: 'srv-1_2026-10',
+      status: 'ACTIVE',
+    })
+    const nov = makePayment('2026-11', {
+      id: 'srv-1_2026-11',
+      status: 'ACTIVE',
+    })
+    const decVoided = makePayment('2026-12', {
+      id: 'srv-1_2026-12',
+      status: 'VOIDED',
+      voidedAt: '2026-11-18T10:00:00.000Z',
+      voidReason: 'Adelanto anulado',
+    })
+
+    const payments = [sep, oct, nov, decVoided]
+
+    // Latest active ignores VOIDED 2026-12 and resolves to 2026-11
+    expect(getLatestActiveServicePayment('srv-1', payments)?.id).toBe(
+      'srv-1_2026-11'
+    )
+    expect(isPaymentEligibleForVoid(service, payments, 'srv-1_2026-11')).toBe(
+      true
+    )
+    expect(isPaymentEligibleForVoid(service, payments, 'srv-1_2026-10')).toBe(
+      false
+    )
+    expect(isPaymentEligibleForVoid(service, payments, 'srv-1_2026-09')).toBe(
+      false
+    )
+    expect(isPaymentEligibleForVoid(service, payments, 'srv-1_2026-12')).toBe(
+      false
+    )
+    expect(
+      isPaymentEligibleForVoid(archivedService, payments, 'srv-1_2026-11')
+    ).toBe(false)
+
+    // Attempting to void historical active payment 2026-10 must fail cleanly
+    expect(() =>
+      voidPaymentOnService(
+        service,
+        payments,
+        'srv-1_2026-10',
+        'Intento sobre pago anterior',
+        '2026-11-19T10:00:00.000Z',
+        new Date(2026, 10, 19)
+      )
+    ).toThrow(ServiceDomainError)
+
+    try {
+      voidPaymentOnService(
+        service,
+        payments,
+        'srv-1_2026-10',
+        'Intento sobre pago anterior',
+        '2026-11-19T10:00:00.000Z',
+        new Date(2026, 10, 19)
+      )
+    } catch (error) {
+      expect(error).toBeInstanceOf(ServiceDomainError)
+      expect((error as ServiceDomainError).code).toBe(
+        'PAYMENT_NOT_LATEST_ACTIVE'
+      )
+    }
+
+    // Voiding 2026-11 (latest active despite voided 2026-12) succeeds
+    const voidedNov = voidPaymentOnService(
+      service,
+      payments,
+      'srv-1_2026-11',
+      'Corrección de noviembre',
+      '2026-11-19T10:00:00.000Z',
+      new Date(2026, 10, 19)
+    )
+    expect(voidedNov.evaluatedStatus.nextPendingPeriod).toBe('2026-11')
+    expect(voidedNov.evaluatedStatus.coveredUntilPeriod).toBe('2026-10')
+    expect(voidedNov.evaluatedStatus.statusBadge).toBe('PENDING')
+
+    // After voiding 2026-11, 2026-10 becomes the new latest active payment
+    expect(
+      isPaymentEligibleForVoid(service, voidedNov.payments, 'srv-1_2026-10')
+    ).toBe(true)
+  })
 })
 
 describe('features/services/domain/service.schemas', () => {
@@ -235,6 +545,29 @@ describe('features/services/domain/service.schemas', () => {
       serviceId: 'srv-1',
     })
     expect(payment.monthsCovered).toBe(1)
+
+    const validVoid = voidServicePaymentSchema.parse({
+      serviceId: 'srv-1',
+      paymentId: 'srv-1_2026-11',
+      reason: '  Error de comprobante  ',
+    })
+    expect(validVoid.reason).toBe('Error de comprobante')
+
+    expect(() =>
+      voidServicePaymentSchema.parse({
+        serviceId: 'srv-1',
+        paymentId: 'srv-1_2026-11',
+        reason: 'ab',
+      })
+    ).toThrow()
+
+    expect(() =>
+      voidServicePaymentSchema.parse({
+        serviceId: 'srv-1',
+        paymentId: 'srv-1_2026-11',
+        reason: 'x'.repeat(201),
+      })
+    ).toThrow()
   })
 })
 
