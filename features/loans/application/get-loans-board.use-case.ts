@@ -2,10 +2,13 @@ import type { Contact } from '@/features/contacts/domain/contact.entity'
 import type { IContactRepository } from '@/features/contacts/domain/contact.repository'
 import {
   getLoanTotals,
+  getOpenEndedInterestBreakdown,
+  isOpenEndedWithInterest,
   roundCurrency,
   type Loan,
   type LoanEffectiveStatus,
   type LoanTotals,
+  type OpenEndedInterestBreakdown,
 } from '@/features/loans/domain/loan.entity'
 import type { ILoanRepository } from '@/features/loans/domain/loan.repository'
 import {
@@ -36,6 +39,7 @@ export interface EnrichedLoan extends Loan, EvaluatedLoanStatus {
   effectivePhone: string | null
   isViaIntermediary: boolean
   totals: LoanTotals
+  openEndedBreakdown: OpenEndedInterestBreakdown | null
   currentCycleInterestDue: number
   requiresReminder: boolean
 }
@@ -162,6 +166,9 @@ export async function getLoansBoardUseCase(
 
       const evaluated = evaluateLoanEffectiveStatus(loan, referenceDate)
       const totals = getLoanTotals(loan)
+      const openEndedBreakdown = isOpenEndedWithInterest(loan)
+        ? getOpenEndedInterestBreakdown(loan)
+        : null
       const currentCycleInterestDue = getOpenEndedCurrentInterestDue(loan)
       const requiresReminder = requiresLoanReminder(loan)
 
@@ -173,6 +180,7 @@ export async function getLoansBoardUseCase(
         effectivePhone,
         isViaIntermediary,
         totals,
+        openEndedBreakdown,
         currentCycleInterestDue,
         requiresReminder,
       }

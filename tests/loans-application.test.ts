@@ -232,6 +232,9 @@ describe('features/loans/application - getLoansBoardUseCase', () => {
 
     expect(board.loans[1].effectiveStatus).toBe('OPEN_ENDED')
     expect(board.loans[1].isOverdue).toBe(false)
+    expect(board.loans[0].openEndedBreakdown).toBeNull()
+    expect(board.loans[1].openEndedBreakdown).toBeNull()
+    expect(board.loans[2].openEndedBreakdown).toBeNull()
 
     // Summary KPIs
     expect(board.summary).toMatchObject({
@@ -244,6 +247,90 @@ describe('features/loans/application - getLoansBoardUseCase', () => {
       openEndedLoansCount: 1,
       paidLoansCount: 1,
     })
+  })
+
+  it('populates openEndedBreakdown only for OPEN_ENDED loans with interestRate > 0', async () => {
+    const contact = makeContact({ id: 'c-direct', name: 'Ana Directa' })
+    const openWithInterest = makeLoan({
+      id: 'l-open-interest',
+      contactId: 'c-direct',
+      interestModel: 'OPEN_ENDED',
+      interestRate: 8,
+      principalAmount: 1000000,
+      totalPrincipalDue: 1000000,
+      totalInterestDue: 200000,
+      paidPrincipal: 500000,
+      paidInterest: 160000,
+      installments: [],
+      monthlyBillingDay: 20,
+      nextInterestDueDate: '2026-12-20',
+      payments: [
+        {
+          id: 'p-1',
+          amount: 160000,
+          principalApplied: 0,
+          interestApplied: 160000,
+          lateFeeApplied: 0,
+          paidAt: '2026-11-20T10:00:00.000Z',
+          receiptPath: null,
+          notes: null,
+          status: 'APPLIED',
+          voidedAt: null,
+          voidReason: null,
+        },
+        {
+          id: 'p-2-void',
+          amount: 40000,
+          principalApplied: 0,
+          interestApplied: 40000,
+          lateFeeApplied: 0,
+          paidAt: '2026-11-21T10:00:00.000Z',
+          receiptPath: null,
+          notes: null,
+          status: 'VOIDED',
+          voidedAt: '2026-11-22T10:00:00.000Z',
+          voidReason: 'Anulado',
+        },
+      ],
+    })
+    const openZeroInterest = makeLoan({
+      id: 'l-open-zero',
+      contactId: 'c-direct',
+      interestModel: 'OPEN_ENDED',
+      interestRate: 0,
+      principalAmount: 400000,
+      totalPrincipalDue: 400000,
+      totalInterestDue: 0,
+      paidPrincipal: 100000,
+      paidInterest: 0,
+      installments: [],
+    })
+
+    const board = await getLoansBoardUseCase('u-1', {
+      loanRepository: createMockLoanRepo({
+        findByUserId: vi
+          .fn()
+          .mockResolvedValue([openWithInterest, openZeroInterest]),
+      }),
+      contactRepository: createMockContactRepo({
+        findByUserId: vi.fn().mockResolvedValue([contact]),
+      }),
+      referenceDate: '2026-11-27',
+    })
+
+    const enrichedWithInterest = board.loans.find(
+      (loan) => loan.id === 'l-open-interest'
+    )
+    const enrichedZeroInterest = board.loans.find(
+      (loan) => loan.id === 'l-open-zero'
+    )
+
+    expect(enrichedWithInterest?.openEndedBreakdown).toEqual({
+      capitalAlive: 500000,
+      pendingInterest: 40000,
+      collectedInterest: 160000,
+    })
+    expect(enrichedZeroInterest?.openEndedBreakdown).toBeNull()
   })
 })
 

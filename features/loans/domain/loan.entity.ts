@@ -161,6 +161,23 @@ export interface LoanTotals {
   progressPercent: number
 }
 
+export interface OpenEndedInterestBreakdown {
+  capitalAlive: number
+  pendingInterest: number
+  collectedInterest: number
+}
+
+/**
+ * Returns `true` exclusively for open-ended revolving loans that accrue
+ * periodic monthly interest (`OPEN_ENDED` with `interestRate > 0`).
+ * Zero-interest open-ended loans and all fixed-schedule models return `false`.
+ */
+export function isOpenEndedWithInterest(
+  loan: Pick<Loan, 'interestModel' | 'interestRate'>
+): boolean {
+  return loan.interestModel === 'OPEN_ENDED' && loan.interestRate > 0
+}
+
 /**
  * Computes exact totals, paid breakdown, remaining balances, and completion progress for a loan.
  */
@@ -219,6 +236,35 @@ export function getLoanTotals(loan: Loan): LoanTotals {
     remainingLateFee,
     remainingTotal,
     progressPercent,
+  }
+}
+
+/**
+ * Computes the three direct balance indicators for open-ended loans with interest:
+ * - `capitalAlive`: original principal still unpaid.
+ * - `pendingInterest`: accrued interest not yet covered (`0` when up to date or settled).
+ * - `collectedInterest`: cumulative interest recovered across valid (non-voided) payments.
+ */
+export function getOpenEndedInterestBreakdown(
+  loan: Loan
+): OpenEndedInterestBreakdown {
+  const totals = getLoanTotals(loan)
+  const collectedInterest =
+    loan.payments.length > 0
+      ? roundCurrency(
+          loan.payments
+            .filter((payment) => payment.status !== 'VOIDED')
+            .reduce(
+              (acc, payment) => acc + Math.max(0, payment.interestApplied),
+              0
+            )
+        )
+      : roundCurrency(Math.max(0, totals.paidInterest))
+
+  return {
+    capitalAlive: totals.remainingPrincipal,
+    pendingInterest: totals.remainingInterest,
+    collectedInterest,
   }
 }
 

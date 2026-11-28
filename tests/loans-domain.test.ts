@@ -6,6 +6,8 @@ import {
   buildLoanReminderMessage,
   buildLoanWhatsAppUrl,
   getLoanTotals,
+  getOpenEndedInterestBreakdown,
+  isOpenEndedWithInterest,
   LoanDomainError,
   type Loan,
 } from '@/features/loans/domain/loan.entity'
@@ -1097,6 +1099,115 @@ describe('features/loans/domain - OPEN_ENDED with monthly interest & reminders',
     expect(message).toContain('Pedro Tercero')
     expect(message).toContain('20 dic 2026')
     expect(message).toContain('80.000')
+  })
+
+  it('classifies OPEN_ENDED with interestRate > 0 separately from 0% and fixed-schedule models, and calculates breakdown excluding voided payments', () => {
+    expect(
+      isOpenEndedWithInterest({ interestModel: 'OPEN_ENDED', interestRate: 8 })
+    ).toBe(true)
+    expect(
+      isOpenEndedWithInterest({ interestModel: 'OPEN_ENDED', interestRate: 0 })
+    ).toBe(false)
+    expect(
+      isOpenEndedWithInterest({ interestModel: 'NO_INTEREST', interestRate: 0 })
+    ).toBe(false)
+    expect(
+      isOpenEndedWithInterest({
+        interestModel: 'SINGLE_PAYMENT',
+        interestRate: 10,
+      })
+    ).toBe(false)
+    expect(
+      isOpenEndedWithInterest({
+        interestModel: 'INTEREST_ONLY_BALLOON',
+        interestRate: 5,
+      })
+    ).toBe(false)
+    expect(
+      isOpenEndedWithInterest({
+        interestModel: 'DECLINING_BALANCE',
+        interestRate: 10,
+      })
+    ).toBe(false)
+
+    const baseOpenLoan = makeLoan({
+      interestModel: 'OPEN_ENDED',
+      interestRate: 8,
+      principalAmount: 1000000,
+      totalPrincipalDue: 1000000,
+      totalInterestDue: 80000,
+      paidPrincipal: 0,
+      paidInterest: 0,
+      installments: [],
+      payments: [],
+      disbursementDate: '2026-11-20',
+      monthlyBillingDay: 20,
+      nextInterestDueDate: '2026-12-20',
+    })
+
+    // Initial state: capitalAlive = 1,000,000; pendingInterest = 80,000; collectedInterest = 0
+    expect(getOpenEndedInterestBreakdown(baseOpenLoan)).toEqual({
+      capitalAlive: 1000000,
+      pendingInterest: 80000,
+      collectedInterest: 0,
+    })
+
+    // Pay $80k interest + $500k capital -> capitalAlive = 500k, pendingInterest = 40k, collectedInterest = 80k
+    const pay1 = applyPaymentToLoan(baseOpenLoan, 580000, {
+      id: 'pay-open-1',
+      paidAt: '2026-12-20T10:00:00.000Z',
+      receiptPath: null,
+      notes: null,
+    })
+    const afterPay1: Loan = { ...baseOpenLoan, ...pay1 }
+    expect(getOpenEndedInterestBreakdown(afterPay1)).toEqual({
+      capitalAlive: 500000,
+      pendingInterest: 40000,
+      collectedInterest: 80000,
+    })
+
+    // Register another payment ($40k interest) and void it -> collectedInterest ignores VOIDED payments
+    const pay2 = applyPaymentToLoan(afterPay1, 40000, {
+      id: 'pay-open-2',
+      paidAt: '2027-01-20T10:00:00.000Z',
+      receiptPath: null,
+      notes: null,
+    })
+    const afterPay2: Loan = { ...afterPay1, ...pay2 }
+    expect(getOpenEndedInterestBreakdown(afterPay2)).toEqual({
+      capitalAlive: 500000,
+      pendingInterest: 40000,
+      collectedInterest: 120000,
+    })
+
+    const afterVoid2 = voidPaymentOnLoan(
+      afterPay2,
+      'pay-open-2',
+      'Pago duplicado',
+      '2027-01-21T10:00:00.000Z'
+    )
+    expect(
+      getOpenEndedInterestBreakdown({ ...afterPay2, ...afterVoid2 })
+    ).toEqual({
+      capitalAlive: 500000,
+      pendingInterest: 40000,
+      collectedInterest: 80000,
+    })
+
+    // Up-to-date / zero pending interest case
+    const upToDateLoan = makeLoan({
+      ...baseOpenLoan,
+      totalPrincipalDue: 1000000,
+      paidPrincipal: 250000,
+      totalInterestDue: 160000,
+      paidInterest: 160000,
+      payments: [],
+    })
+    expect(getOpenEndedInterestBreakdown(upToDateLoan)).toEqual({
+      capitalAlive: 750000,
+      pendingInterest: 0,
+      collectedInterest: 160000,
+    })
   })
 })
 
